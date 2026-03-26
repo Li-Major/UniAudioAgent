@@ -10,19 +10,18 @@ import { IPC } from '../../shared/ipc-channels'
 const SYSTEM_PROMPT = `你是 UniAudioAgent，一个专业的游戏音频助手。你帮助音频设计师通过自然语言与 Wwise 音频中间件交互。
 
 你的能力：
-- 查询 Wwise 项目中的对象、属性和层级结构
-- 读取和修改对象属性（如 Volume、Pitch、Output Bus 等）
-- 获取当前项目信息
+- 回答游戏音频设计、Wwise 工作流和实现思路相关问题
+- 协助用户整理需求、生成操作建议和技术方案
+- 在接入 MCP 工具后，基于外部工具扩展实际执行能力
 
 操作规范：
-- 在执行任何写操作（setProperty）前，必须先向用户描述即将进行的修改并请求确认
-- 当工具返回错误时，清晰地向用户解释问题，并提供具体的解决建议
-- 如果查询结果过多，主动提示用户缩小搜索范围
+- 当前应用不再直接发起 WAAPI WebSocket 连接，也不直接操作 Wwise
+- 如果用户要求读取或修改 Wwise 项目，明确说明需要等待后续 MCP 接入
 - 使用中文回复，但保留 Wwise 专业术语（如 Event、Bus、SoundBank）的英文命名
 
 局限：
-- 你只能操作当前在 Wwise 中打开的项目
-- 复杂的批量操作需要多次工具调用，请耐心执行`
+- 当前版本不具备内置 Wwise 工具调用能力
+- 复杂的自动化操作需要等待 MCP 工具接入后再执行`
 
 export async function streamChatToRenderer(
   messages: CoreMessage[],
@@ -61,18 +60,6 @@ export async function streamChatToRenderer(
       switch (part.type) {
         case 'text-delta':
           sender.send(IPC.CHAT_DELTA, part.textDelta)
-          break
-        case 'tool-call':
-          sender.send(IPC.CHAT_TOOL_CALL, {
-            toolName: part.toolName,
-            args: part.args,
-          })
-          break
-        case 'tool-result':
-          sender.send(IPC.CHAT_TOOL_RESULT, {
-            toolName: part.toolName,
-            result: part.result,
-          })
           break
         case 'error':
           sender.send(IPC.CHAT_ERROR, String(part.error))

@@ -1,11 +1,8 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupChatHandlers } from './ipc/chat'
 import { setupSettingsHandlers } from './ipc/settings'
-import { waapiService } from './services/waapi'
-import { storeService } from './services/store'
-import { IPC } from '../shared/ipc-channels'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -49,30 +46,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const mainWindow = createWindow()
+  createWindow()
 
   // Register IPC handlers
   setupChatHandlers()
   setupSettingsHandlers()
-
-  // WAAPI status → renderer
-  waapiService.setStatusCallback((status) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC.WAAPI_STATUS, status)
-    }
-  })
-
-  // Manual reconnect from renderer
-  ipcMain.on(IPC.WAAPI_RECONNECT, () => {
-    const settings = storeService.getSettings()
-    waapiService.setUrl(settings.waapiUrl)
-    waapiService.connect()
-  })
-
-  // Start WAAPI connection with stored URL
-  const settings = storeService.getSettings()
-  waapiService.setUrl(settings.waapiUrl)
-  waapiService.connect()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -80,6 +58,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  waapiService.disconnect()
   if (process.platform !== 'darwin') app.quit()
 })

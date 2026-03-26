@@ -7,13 +7,11 @@
 **关键交付**
 - [x] 项目骨架：electron-vite + React + TypeScript + Tailwind
 - [x] 项目文档（MVP、路线图、开发指引）
-- [ ] electron-store 配置持久化 + safeStorage 加密
-- [ ] 原生 WAMP 客户端（`ws` 封装，连接 Wwise WAAPI）
-- [ ] Vercel AI SDK + OpenRouter 流式对话
-- [ ] 6 个内置 Wwise Tools（查询/修改）
-- [ ] 聊天 UI（消息流、工具状态、Markdown 渲染）
-- [ ] 设置面板（API Key、Wwise URL、模型选择）
-- [ ] Wwise 连接状态栏 + 自动重连
+- [x] electron-store 配置持久化 + safeStorage 加密
+- [x] Vercel AI SDK + OpenRouter / Ollama 流式对话
+- [x] 聊天 UI（消息流、工具状态、Markdown 渲染）
+- [x] 设置面板（API Key、Ollama URL、模型选择）
+- [x] 移除内置 WAAPI / Wwise Tool，转为 MCP 预留宿主
 
 **退出标准**：通过 `docs/MVP.md` 中全部 5 项验收标准。
 
@@ -24,6 +22,7 @@
 **目标**：将工具层升级为 MCP 协议标准，实现外部扩展与生态互通。
 
 **核心变化**
+- App 不再直接发起 WAAPI WebSocket 连接
 - 内置 Wwise Tools 迁移为独立内部 MCP Server（stdio 传输，App 启动时自动拉起）
 - App 主进程成为 MCP Host，通过配置文件（`mcp.config.json`）连接任意外部 MCP Server
 - 使用 `@modelcontextprotocol/sdk` 的 `Client` 动态发现并注册工具
@@ -77,8 +76,8 @@
 
 ## 持续改进（贯穿各阶段）
 
-- Wwise Tool 覆盖率扩展（目标：WAAPI 常用端点 100% 覆盖）
-- 单元测试：核心服务（LLM service、WAAPI client、tool registry）
+- Wwise MCP Tool 覆盖率扩展（目标：WAAPI 常用端点 100% 覆盖）
+- 单元测试：核心服务（LLM service、MCP host、tool registry）
 - E2E 测试：关键工作流（查询对象、修改属性、导航层级）
 - i18n：界面多语言（中文/英文）
-- 离线降级：支持连接本地 Ollama 等 OpenAI 兼容端点
+- 离线降级：支持连接本地 Ollama 等本地模型服务

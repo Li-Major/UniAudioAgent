@@ -35,7 +35,6 @@ export default function SettingsPanel({ onClose }: Props): JSX.Element {
     llmProvider: 'openrouter',
     openrouterApiKey: '',
     ollamaBaseUrl: 'http://127.0.0.1:11434/api',
-    waapiUrl: 'ws://127.0.0.1:8080/waapi',
     defaultModel: 'anthropic/claude-3-5-sonnet',
   })
   const [saving, setSaving] = useState(false)
@@ -184,20 +183,9 @@ export default function SettingsPanel({ onClose }: Props): JSX.Element {
             </section>
           )}
 
-          {/* Wwise URL */}
           <section>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Wwise WAAPI 连接地址
-            </label>
-            <input
-              type="text"
-              value={settings.waapiUrl}
-              onChange={(e) => setSettings((s) => ({ ...s, waapiUrl: e.target.value }))}
-              placeholder="ws://127.0.0.1:8080/waapi"
-              className="w-full bg-surface-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-teal-600 transition-colors selectable font-mono"
-            />
-            <p className="text-xs text-gray-600 mt-1">
-              确保 Wwise 中已启用 WAAPI（Project &gt; User Preferences &gt; Enable Wwise Authoring API）
+            <p className="text-xs text-gray-600 leading-5">
+              当前应用已移除内置 WAAPI 连接。后续 Wwise 接入将通过 MCP 完成，由 MCP 侧负责发起 WebSocket 连接和工具执行。
             </p>
           </section>
         </div>

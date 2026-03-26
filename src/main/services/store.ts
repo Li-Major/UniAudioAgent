@@ -4,7 +4,6 @@ import type { AppSettings } from '../../shared/types'
 
 interface StoreSchema {
   llmProvider: 'openrouter' | 'ollama'
-  waapiUrl: string
   ollamaBaseUrl: string
   defaultModel: string
   openrouterApiKeyEncrypted: string
@@ -13,7 +12,6 @@ interface StoreSchema {
 const store = new Store<StoreSchema>({
   defaults: {
     llmProvider: 'openrouter',
-    waapiUrl: 'ws://127.0.0.1:8080/waapi',
     ollamaBaseUrl: 'http://127.0.0.1:11434/api',
     defaultModel: 'anthropic/claude-3-5-sonnet',
     openrouterApiKeyEncrypted: '',
@@ -54,7 +52,6 @@ export const storeService = {
       llmProvider: store.get('llmProvider'),
       openrouterApiKey: this.getApiKey(),
       ollamaBaseUrl: store.get('ollamaBaseUrl'),
-      waapiUrl: store.get('waapiUrl'),
       defaultModel: store.get('defaultModel'),
     }
   },
@@ -62,9 +59,6 @@ export const storeService = {
   setSettings(partial: Partial<AppSettings>): void {
     if (partial.openrouterApiKey !== undefined) {
       this.setApiKey(partial.openrouterApiKey)
-    }
-    if (partial.waapiUrl !== undefined) {
-      store.set('waapiUrl', partial.waapiUrl)
     }
     if (partial.ollamaBaseUrl !== undefined) {
       store.set('ollamaBaseUrl', partial.ollamaBaseUrl)

@@ -17,12 +17,6 @@ export const IPC = {
   // ── Settings ──────────────────────────────────────────────────────────────
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
-
-  // ── WAAPI status ──────────────────────────────────────────────────────────
-  /** main → renderer: Wwise connection state changed */
-  WAAPI_STATUS: 'waapi:status',
-  /** renderer → main: manually request a reconnect attempt */
-  WAAPI_RECONNECT: 'waapi:reconnect',
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

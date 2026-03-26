@@ -6,7 +6,7 @@
 
 ## 一、项目定位
 
-面向游戏音频设计师的桌面 AI 工具，通过自然语言操作 Wwise 音频中间件（后续扩展至 Reaper 等 DAW）。
+面向游戏音频设计师的桌面 AI 工具，当前提供稳定的 LLM 宿主与设置管理，后续通过 MCP 接入 Wwise、Reaper 等外部工具。
 
 **核心架构原则**
 1. **进程隔离安全**：所有 LLM API 调用和外部服务交互在 Electron **主进程**中进行，API Key 不暴露至渲染进程
@@ -26,7 +26,7 @@
 | `tailwindcss` | ^3.x | UI 样式 |
 | `ai` (Vercel AI SDK) | ^4.x | LLM 调用、Tool calling、流式输出 |
 | `@openrouter/ai-sdk-provider` | ^0.4.x | OpenRouter provider |
-| `ws` | ^8.x | Node.js WebSocket（WAAPI WAMP 连接） |
+| `ollama-ai-provider` | ^1.x | Ollama provider |
 | `electron-store` | ^8.x | 配置持久化 |
 | `zod` | ^3.x | Tool 参数 Schema 定义 |
 | `react-markdown` + `remark-gfm` | ^9.x/^4.x | 渲染 LLM Markdown 输出 |
@@ -37,7 +37,7 @@
 **阶段三新增**
 - `@lancedb/lancedb` latest — 本地嵌入式向量数据库
 
-> ⚠️ 官方 `waapi-client` npm 包已 8 年未更新（v2017.2.1），本项目使用 `ws` 自行封装轻量 WAMP 客户端，仅实现 `HELLO/WELCOME/CALL/RESULT/ERROR` 消息类型。
+> 当前仓库已移除内置 WAAPI 连接与 Wwise Tool，后续统一通过 MCP Server 接入外部能力。
 
 ---
 
@@ -56,17 +56,9 @@ UniAudioAgent/
 │   │   ├── index.ts              # 入口：创建窗口、注册 IPC、启动服务
 │   │   ├── services/
 │   │   │   ├── store.ts          # electron-store + safeStorage 封装
-│   │   │   ├── waapi.ts          # WAAPI WebSocket / WAMP 连接服务
 │   │   │   └── llm.ts            # Vercel AI SDK streamText 封装
 │   │   ├── tools/
-│   │   │   ├── index.ts          # 工具注册表，导出 allTools
-│   │   │   └── wwise/            # 各 Wwise tool 实现
-│   │   │       ├── getProjectInfo.ts
-│   │   │       ├── findObjects.ts
-│   │   │       ├── getObject.ts
-│   │   │       ├── getChildren.ts
-│   │   │       ├── setProperty.ts
-│   │   │       └── getSelectedObjects.ts
+│   │   │   └── index.ts          # 工具注册表（当前为空，等待 MCP 动态接入）
 │   │   └── ipc/
 │   │       ├── chat.ts           # chat:send handler（流式推送）
 │   │       └── settings.ts       # settings:get / settings:set
@@ -86,8 +78,7 @@ UniAudioAgent/
 │           │   ├── ChatWindow.tsx
 │           │   ├── MessageList.tsx
 │           │   ├── InputBar.tsx
-│           │   ├── SettingsPanel.tsx
-│           │   └── StatusBar.tsx
+│           │   └── SettingsPanel.tsx
 │           └── hooks/
 │               └── useChat.ts    # 聊天状态管理 hook
 │
@@ -123,13 +114,19 @@ invoke resolves void  <───────────────────
 
 **原则**：渲染进程只知道 channel 名称，所有业务逻辑在主进程。
 
-### 4.2 Tool 定义规范
+### 4.2 Tool 接入规范
+
+当前仓库不再内置 Wwise Tool。后续接入方式：
+- 由 MCP Host 在主进程动态发现外部 MCP Server 提供的工具
+- 将 MCP 工具映射为 AI SDK 可调用工具，再注册到 `allTools`
+- 工具实现与 WebSocket 连接均下沉到 MCP Server，不放在 Electron App 内
+
+如果需要临时保留本地工具，仍然遵守以下约定：
 
 ```typescript
-// src/main/tools/wwise/myTool.ts
+// src/main/tools/myTool.ts
 import { tool } from 'ai'
 import { z } from 'zod'
-import { waapiService } from '../../services/waapi'
 
 export const myTool = tool({
   // description 决定 LLM 何时调用本工具 — 必须准确描述"功能"与"适用场景"
@@ -140,8 +137,7 @@ export const myTool = tool({
   }),
   execute: async ({ name }) => {
     try {
-      const result = await waapiService.call('ak.wwise.core...', { ... })
-      return result
+      return { name }
     } catch (err) {
       // 不抛出异常，返回错误对象让 LLM 感知并告知用户
       return { error: `操作失败: ${String(err)}` }
@@ -155,26 +151,7 @@ export const myTool = tool({
 export const allTools = { myTool, ...otherTools }
 ```
 
-### 4.3 WAAPI 服务（`waapiService`）
-
-单例，管理 WAMP over WebSocket 连接：
-- `waapiService.connect()` — 启动连接（自动重连）
-- `waapiService.disconnect()` — 关闭连接
-- `waapiService.call(uri, args)` — 调用 WAAPI 端点，返回 `Promise<unknown>`
-- `waapiService.setUrl(url)` — 切换连接地址
-- `waapiService.setStatusCallback(cb)` — 注册状态变化回调
-
-WAMP 消息类型（仅实现必要子集）：
-```
-HELLO    [1, realm, {roles:{caller:{}}}]
-WELCOME  [2, sessionId, details]
-ABORT    [3, details, reason]
-CALL     [48, requestId, {}, uri, [args]]
-RESULT   [50, requestId, details, [result]]
-ERROR    [8, 48, requestId, details, uri, [args]]
-```
-
-### 4.4 LLM 流式调用
+### 4.3 LLM 流式调用
 
 ```typescript
 // src/main/ipc/chat.ts
@@ -206,18 +183,17 @@ ipcMain.handle(IPC.CHAT_SEND, async (event, messages: CoreMessage[]) => {
 - **IPC channel**：全部使用 `src/shared/ipc-channels.ts` 中的常量，禁止魔法字符串
 - **API Key**：使用 `safeStorage.encryptString()` 加密后存储，仅在主进程解密使用
 - **Electron 安全**：`contextIsolation: true`、`nodeIntegration: false`；渲染进程只通过 `preload` 暴露的 `window.api` 访问 IPC
-- **SSRF 防护**：WAAPI 连接地址在服务层强制限制为本地地址（`127.0.0.1` / `localhost`），拒绝外部 URL
 - **Tool 错误处理**：`execute` 函数内必须 `try/catch`，捕获后返回 `{ error: string }`，不允许向外抛出
 - **Tool 返回数据量**：查询类 Tool 默认限制返回 `count: 50`，避免超出 LLM context 窗口
 
 ---
 
-## 六、新增 Wwise Tool 步骤
+## 六、新增 MCP / Tool 步骤
 
-1. 在 `src/main/tools/wwise/` 下创建新文件
-2. 用 `tool()` + `zod` 定义并导出（参考 4.2 规范）
-3. 在 `src/main/tools/index.ts` 中导入并加入 `allTools`
-4. 在 `docs/MVP.md` Tool 列表中补充条目
+1. 优先实现独立 MCP Server，由 MCP 侧负责外部连接与实际执行
+2. 在 App 主进程中为 MCP Client 增加发现、注册和生命周期管理
+3. 如需临时本地工具，再用 `tool()` + `zod` 定义并导出（参考 4.2 规范）
+4. 在相关文档中补充能力边界和接入方式
 
 ---
 
@@ -246,8 +222,6 @@ ipcMain.handle(IPC.CHAT_SEND, async (event, messages: CoreMessage[]) => {
 
 ## 九、外部参考
 
-- [Wwise WAAPI 官方文档](https://www.audiokinetic.com/en/library/edge/?source=SDK&id=waapi.html)
-- [WAMP 协议规范](https://wamp-proto.org/spec.html)
 - [Vercel AI SDK 文档](https://sdk.vercel.ai/docs)
 - [OpenRouter 模型列表](https://openrouter.ai/models)
 - [MCP 协议规范](https://modelcontextprotocol.io)

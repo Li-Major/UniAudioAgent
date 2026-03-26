@@ -18,14 +18,7 @@ export interface AppSettings {
   llmProvider: 'openrouter' | 'ollama'
   openrouterApiKey: string
   ollamaBaseUrl: string
-  waapiUrl: string
   defaultModel: string
-}
-
-export interface WaapiStatus {
-  connected: boolean
-  url: string
-  error?: string
 }
 
 /** Passed from main → renderer to indicate streaming progress */

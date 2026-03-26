@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
 import { storeService } from '../services/store'
-import { waapiService } from '../services/waapi'
 import { IPC } from '../../shared/ipc-channels'
 import type { AppSettings } from '../../shared/types'
 
@@ -25,13 +24,6 @@ export function setupSettingsHandlers(): void {
     }
 
     storeService.setSettings(toUpdate)
-
-    // If WAAPI URL changed, reconnect
-    if (partial.waapiUrl) {
-      waapiService.disconnect()
-      waapiService.setUrl(partial.waapiUrl)
-      waapiService.connect()
-    }
 
     return { success: true }
   })

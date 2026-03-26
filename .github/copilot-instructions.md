@@ -1,6 +1,6 @@
 # UniAudioAgent — AI Workspace Instructions
 
-**Project:** AI desktop assistant for game audio designers, providing natural language interface to Wwise audio middleware via LLM with tool calling.
+**Project:** AI desktop assistant for game audio designers. The current app is an LLM host and settings shell; Wwise integration will be reintroduced later via MCP.
 
 **Language:** Electron + React + TypeScript + Tailwind. Documentation in Chinese (see [DEVELOPMENT.md](../docs/DEVELOPMENT.md)).
 
@@ -27,10 +27,9 @@
 ```
 Main Process (Node.js)              Renderer Process (Chromium)
 ├── LLM API calls                  ├── React UI
-├── Wwise WAAPI WebSocket          ├── Component hierarchy
 ├── IPC handlers                   └── Event listeners
 ├── Persistent storage (encrypted)
-└── Tool coordination
+└── Future MCP host integration
 ```
 
 **Key principle:** All API keys and external service calls happen in main process. Renderer is sandboxed (`contextIsolation: true`).
@@ -42,7 +41,6 @@ All channels defined in [ipc-channels.ts](../src/shared/ipc-channels.ts) using d
 | Pattern | Example | Direction | Purpose |
 |---------|---------|-----------|---------|
 | `CHAT_*` | `CHAT_SEND`, `CHAT_DELTA`, `CHAT_DONE` | Bi-directional | Streaming chat conversation |
-| `WAAPI_*` | `WAAPI_STATUS`, `WAAPI_RECONNECT` | Bi-directional | Wwise connection state |
 | `SETTINGS_*` | `SETTINGS_GET`, `SETTINGS_SET` | Bi-directional | Persistent configuration |
 
 **Streaming pattern:** Renderer sends `CHAT_SEND` → Main streams tokens via `CHAT_DELTA` events → Ends with `CHAT_DONE`.
@@ -51,29 +49,23 @@ All channels defined in [ipc-channels.ts](../src/shared/ipc-channels.ts) using d
 
 ## Key Services (Main Process)
 
-### [waapiService](../src/main/services/waapi.ts)
-- WebSocket WAMP v2 client to Wwise (custom implementation via `ws` package)
-- Calls Wwise RPC methods: `ak.wwise.core.getInfo`, `ak.wwise.core.object.setProperty`, etc.
-- Connection timeout: 15 seconds per call
-- Reports connection state to renderer via `WAAPI_STATUS` IPC
-
 ### [storeService](../src/main/services/store.ts)
 - Persistent encrypted storage using `electron-store` + OS keychain (`safeStorage`)
-- Stores: `waapiUrl`, `openrouterApiKey`, `defaultModel`
+- Stores: `llmProvider`, `openrouterApiKey`, `ollamaBaseUrl`, `defaultModel`
 - Automatically available across app restarts
 
 ### [LLM Streaming](../src/main/services/llm.ts)
-- Uses Vercel AI SDK (`ai@^4.3.15`) with OpenRouter provider
-- Chinese system prompt (Wwise domain expert persona)
-- Tool calling loop (max 10 iterations)
+- Uses Vercel AI SDK (`ai@^4.3.15`) with OpenRouter and Ollama providers
+- Chinese system prompt tuned for the current pre-MCP host phase
+- Tool calling loop reserved for future MCP tool integration
 - Runs inside main process, streams tokens to renderer
 
 ---
 
 ## Naming Conventions
 
-- **IPC channels:** Lowercase dot notation (`chat:send`, `waapi:status`)
-- **Services:** Suffix with `Service` (`waapiService`, `storeService`)
+- **IPC channels:** Lowercase dot notation (`chat:send`, `settings:get`)
+- **Services:** Suffix with `Service` (`storeService`)
 - **Tools/Functions:** Camel case with descriptive names (`getProjectInfo`, `setProperty`)
 - **Types:** Re-export from [types.ts](../src/shared/types.ts) for type safety
 
@@ -94,17 +86,16 @@ Path aliases:
 
 ## Project Status & Phases
 
-**Phase 1 (MVP):** Core Wwise + LLM interaction. In progress.
+**Phase 1 (Current):** LLM host shell before MCP integration.
 - [x] Project skeleton (electron-vite + React + Tailwind)
 - [x] electron-store + safeStorage (encrypted API key)
-- [x] WAAPI service (native WAMP/ws client, auto-reconnect, SSRF guard)
-- [x] LLM service (Vercel AI SDK + OpenRouter, streaming, tool calling)
-- [x] 6 Wwise tools (getProjectInfo, findObjects, getObject, getChildren, setProperty, getSelectedObjects)
+- [x] LLM service (Vercel AI SDK + OpenRouter / Ollama, streaming)
 - [x] IPC handlers (chat:send streaming, settings:get/set)
 - [x] Preload bridge (window.api)
-- [x] Chat UI (MessageList, InputBar, SettingsPanel, StatusBar)
+- [x] Chat UI (MessageList, InputBar, SettingsPanel)
+- [x] Removed built-in WAAPI and Wwise tools pending MCP integration
 - [ ] npm install + first run validation
-- [ ] End-to-end test with live Wwise instance
+- [ ] MCP Host initial integration
 
 **Phase 2:** MCP architecture (Wwise tools as independent MCP Server)  
 **Phase 3:** Local RAG knowledge base (LanceDB)  
@@ -122,11 +113,11 @@ See [ROADMAP.md](../docs/ROADMAP.md) for full roadmap.
 3. Register handler in main process (e.g., in [src/main/index.ts](../src/main/index.ts))
 4. Call from renderer via `ipcRenderer.invoke()` or `ipcRenderer.on()`
 
-### Adding a Wwise tool
-1. Create new file in [src/main/tools/wwise/](../src/main/tools/wwise/) (e.g., `newTool.ts`)
-2. Export with `tool({ description, parameters: z.object({...}), execute })`
-3. Import and add to `allTools` in [src/main/tools/index.ts](../src/main/tools/index.ts)
-4. Update the Tool table in [docs/MVP.md](../docs/MVP.md)
+### Adding a new tool
+1. Prefer implementing it in an MCP Server instead of directly in the Electron app
+2. If a temporary local tool is necessary, add it under [src/main/tools/](../src/main/tools/)
+3. Export with `tool({ description, parameters: z.object({...}), execute })`
+4. Import and add to `allTools` in [src/main/tools/index.ts](../src/main/tools/index.ts)
 
 ### Running type checks
 ```powershell
@@ -157,18 +148,17 @@ npm run typecheck         # Both
 | **Language** | TypeScript 5.5 | Full type safety |
 | **LLM** | Vercel AI SDK 4.x + OpenRouter | Streaming + tool calling |
 | **IPC** | Electron IPC (preload + context isolation) | Type-safe via ipc-channels.ts |
-| **Wwise API** | WAMP v2 over WebSocket | Custom client (`ws` package) |
+| **Wwise Integration** | MCP (planned) | External MCP server owns WAAPI/WebSocket |
 | **Storage** | electron-store 8.x | Encrypted with OS keychain |
 | **Serialization** | Zod 3.x | Schema validation for tool parameters |
 
-**⚠️ Note:** Official `waapi-client` npm package hasn't been maintained in 8+ years (v2017.2.1). This project uses a lightweight WAMP v2 client built with `ws`.
+**⚠️ Note:** This repository no longer maintains a direct WAAPI client. Keep Wwise transport and RPC logic in the future MCP server, not in the Electron app.
 
 ---
 
 ## Security Notes
 
 - **Context isolation:** Enabled (`contextIsolation: true` in [src/main/index.ts](../src/main/index.ts))
-- **SSRF protection:** WAAPI client only accepts loopback addresses (`127.0.0.1`, `localhost`, `::1`)
 - **API keys:** Encrypted in electron-store using OS keychain (`safeStorage`)
 - **Preload script:** Implemented at [src/preload/index.ts](../src/preload/index.ts), exposes `window.api` with `invoke/on/once/send`
 
@@ -189,4 +179,4 @@ When implementing features:
 
 - **Hot reload not working** → Ensure you ran `npm run dev` not just `npm run build`
 - **Type errors across processes** → Check you're using the correct `tsconfig` path
-- **Wwise not connecting** → Check [waapiService](../src/main/services/waapi.ts) logs and verify Wwise is running on configured URL
+- **Wwise workflows unavailable** → Expected in current phase; Wwise operations will return after MCP integration lands

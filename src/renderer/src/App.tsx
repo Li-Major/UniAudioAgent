@@ -1,23 +1,9 @@
-import { useState, useEffect } from 'react'
-import { IPC } from '@shared/ipc-channels'
-import type { WaapiStatus } from '@shared/types'
+import { useState } from 'react'
 import ChatWindow from './components/ChatWindow'
 import SettingsPanel from './components/SettingsPanel'
-import StatusBar from './components/StatusBar'
 
 export default function App(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
-  const [waapiStatus, setWaapiStatus] = useState<WaapiStatus>({
-    connected: false,
-    url: 'ws://127.0.0.1:8080/waapi',
-  })
-
-  useEffect(() => {
-    const removeListener = window.api.on(IPC.WAAPI_STATUS, (status) => {
-      setWaapiStatus(status as WaapiStatus)
-    })
-    return removeListener
-  }, [])
 
   return (
     <div className="flex flex-col h-screen bg-surface-900 text-gray-100 overflow-hidden">
@@ -54,9 +40,6 @@ export default function App(): JSX.Element {
       <main className="flex-1 overflow-hidden">
         <ChatWindow />
       </main>
-
-      {/* Status bar */}
-      <StatusBar waapiStatus={waapiStatus} />
 
       {/* Settings panel overlay */}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
