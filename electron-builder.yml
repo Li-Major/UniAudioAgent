@@ -1,0 +1,42 @@
+appId: com.uni-audio-agent
+productName: UniAudioAgent
+copyright: Copyright © 2026
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  artifactName: ${productName}-${version}.${ext}
+  category: public.app-category.music
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+
+publish: null

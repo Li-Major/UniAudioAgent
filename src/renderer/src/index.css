@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Prevent text selection on drag */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in chat messages */
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Markdown content resets */
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3 {
+  @apply font-semibold text-gray-200 mt-3 mb-1;
+}
+.prose-chat p {
+  @apply mb-2 leading-relaxed;
+}
+.prose-chat ul,
+.prose-chat ol {
+  @apply pl-5 mb-2 space-y-1;
+}
+.prose-chat ul {
+  @apply list-disc;
+}
+.prose-chat ol {
+  @apply list-decimal;
+}
+.prose-chat code {
+  @apply bg-gray-700 text-teal-300 px-1 py-0.5 rounded text-sm font-mono;
+}
+.prose-chat pre {
+  @apply bg-gray-900 rounded-md p-3 overflow-x-auto mb-2;
+}
+.prose-chat pre code {
+  @apply bg-transparent p-0;
+}
+.prose-chat table {
+  @apply w-full text-sm border-collapse mb-2;
+}
+.prose-chat th {
+  @apply bg-gray-700 px-3 py-1.5 text-left font-medium;
+}
+.prose-chat td {
+  @apply border-t border-gray-700 px-3 py-1.5;
+}
+.prose-chat a {
+  @apply text-teal-400 underline;
+}
