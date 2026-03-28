@@ -261,6 +261,14 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 App 会在启动时读取仓库根目录的 `mcp.config.json`，并连接所有 `enabled !== false` 的服务。
 
+此外，若检测到依赖 `wwise-waapi-mcp` 已安装，App 会自动注入一个**内置 MCP 服务**（`id: "wwise-waapi"`，stdio）用于 Wwise WAAPI：
+
+- 默认启动命令：`<electron-execPath> <wwise-waapi-mcp main>`（通过 `ELECTRON_RUN_AS_NODE=1` 运行）
+- 默认 `toolPrefix`：`wwise`
+- 默认 `timeoutMs`：`45000`
+- 可在 `mcp.config.json` 使用同 `id` 覆盖参数，或设置 `enabled: false` 禁用
+- 也可通过环境变量 `UNIAUDIO_DISABLE_BUILTIN_WWISE_MCP=1` 全局禁用自动注入
+
 标准配置示例：
 
 ```json
@@ -281,6 +289,23 @@ App 会在启动时读取仓库根目录的 `mcp.config.json`，并连接所有 
       "includeTools": ["getProjectInfo", "findObjects"],
       "excludeTools": [],
       "timeoutMs": 30000
+    }
+  ]
+}
+```
+
+内置 Wwise MCP 覆盖/禁用示例：
+
+```json
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "wwise-waapi",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "node",
+      "args": ["./node_modules/wwise-waapi-mcp/dist/src/index.js"]
     }
   ]
 }

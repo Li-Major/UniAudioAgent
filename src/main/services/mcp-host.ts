@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { tool, type ToolSet } from 'ai'
@@ -30,7 +30,69 @@ interface McpConfigFile {
 }
 
 const DEFAULT_CONFIG_PATH = 'mcp.config.json'
+const BUILTIN_WWISE_SERVER_ID = 'wwise-waapi'
 const activeClients = new Map<string, Client>()
+
+function isBuiltinWwiseDisabled(): boolean {
+  const value = (process.env.UNIAUDIO_DISABLE_BUILTIN_WWISE_MCP ?? '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
+function resolveBuiltinWwiseServer(): McpServerConfig | null {
+  if (isBuiltinWwiseDisabled()) {
+    return null
+  }
+
+  try {
+    const packageJsonPath = require.resolve('wwise-waapi-mcp/package.json')
+    const packageRoot = dirname(packageJsonPath)
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as { main?: string }
+    const entryRelativePath = typeof packageJson.main === 'string' && packageJson.main.length > 0
+      ? packageJson.main
+      : 'dist/src/index.js'
+    const entryPath = resolve(packageRoot, entryRelativePath)
+
+    if (!existsSync(entryPath)) {
+      console.warn(`[mcp] Builtin Wwise MCP entry not found: ${entryPath}`)
+      return null
+    }
+
+    return {
+      id: BUILTIN_WWISE_SERVER_ID,
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: [entryPath],
+      cwd: packageRoot,
+      env: {
+        ELECTRON_RUN_AS_NODE: '1',
+      },
+      toolPrefix: 'wwise',
+      timeoutMs: 45000,
+    }
+  } catch {
+    return null
+  }
+}
+
+function mergeBuiltinServers(config: McpConfigFile): McpConfigFile {
+  const mergedById = new Map<string, McpServerConfig>()
+  const builtinWwise = resolveBuiltinWwiseServer()
+
+  if (builtinWwise) {
+    mergedById.set(builtinWwise.id, builtinWwise)
+  }
+
+  for (const server of config.servers) {
+    // User config with the same id overrides builtin entry (including enabled: false).
+    mergedById.set(server.id, server)
+  }
+
+  return {
+    version: config.version,
+    servers: Array.from(mergedById.values()),
+  }
+}
 
 function normalizeConfig(raw: unknown): McpConfigFile {
   if (!raw || typeof raw !== 'object') {
@@ -84,15 +146,15 @@ function loadMcpConfig(): McpConfigFile {
   const configPath = getConfigPath()
 
   if (!existsSync(configPath)) {
-    return { version: 1, servers: [] }
+    return mergeBuiltinServers({ version: 1, servers: [] })
   }
 
   try {
     const text = readFileSync(configPath, 'utf-8')
-    return normalizeConfig(JSON.parse(text) as unknown)
+    return mergeBuiltinServers(normalizeConfig(JSON.parse(text) as unknown))
   } catch (err) {
     console.error('[mcp] Failed to parse config:', err)
-    return { version: 1, servers: [] }
+    return mergeBuiltinServers({ version: 1, servers: [] })
   }
 }
 
@@ -183,6 +245,22 @@ function buildRegisteredName(server: McpServerConfig, rawToolName: string): stri
   return prefix.length > 0 ? `${prefix}__${rawToolName}` : rawToolName
 }
 
+function mergedProcessEnv(extra?: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === 'string') {
+      env[key] = value
+    }
+  }
+
+  if (extra) {
+    Object.assign(env, extra)
+  }
+
+  return env
+}
+
 async function createServerTools(server: McpServerConfig): Promise<{ client: Client; tools: ToolSet }> {
   const client = new Client({
     name: 'uni-audio-agent',
@@ -192,7 +270,7 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
   const transport = new StdioClientTransport({
     command: server.command,
     args: server.args,
-    env: server.env,
+    env: mergedProcessEnv(server.env),
     cwd: server.cwd,
     stderr: 'pipe',
   })

@@ -27,7 +27,7 @@
 - [x] 支持 stdio 传输、工具过滤、命名空间隔离（prefix__toolName）
 - [x] MCP 工具调用支持超时保护与错误恢复
 - [ ] **工具分组架构**：混合工具源（多MCP + 内置）的智能优先级与context预算管理
-- [ ] 内置 Wwise Tools 迁移为独立内部 MCP Server（stdio 传输，App 启动时自动拉起）
+- [x] 内置 Wwise Tools 迁移为独立内部 MCP Server（stdio 传输，App 启动时自动拉起）
 - [ ] 将 Wwise MCP Server 作为独立 npm 包发布，可被 Claude Desktop、Cursor 等 MCP 宿主使用
 
 **用户体验**
