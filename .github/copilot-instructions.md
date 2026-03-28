@@ -6,6 +6,17 @@
 
 ---
 
+## Project intent
+
+- Think carefully about the core value proposition and user needs before adding features.
+- Try to find a best solution that can be implemented in a simple way, rather than adding complex features or abstractions.
+- Keep the codebase simple and maintainable, even if it means not implementing some features or optimizations.
+- Prefer adding small, representative, composable capabilities over broad unfinished abstractions.
+- Prefer minimal, local changes.
+- Keep terms in English even when writing documents in Chinese.
+- When done something, check if you need to documents. If so, add to existing docs or create new ones as needed.
+
+
 ## Quick Start
 
 ### Commands
@@ -86,7 +97,7 @@ Path aliases:
 
 ## Project Status & Phases
 
-**Phase 1 (Current):** LLM host shell before MCP integration.
+**Phase 1 (Complete):** LLM host shell with MCP Host framework.
 - [x] Project skeleton (electron-vite + React + Tailwind)
 - [x] electron-store + safeStorage (encrypted API key)
 - [x] LLM service (Vercel AI SDK + OpenRouter / Ollama, streaming)
@@ -94,8 +105,10 @@ Path aliases:
 - [x] Preload bridge (window.api)
 - [x] Chat UI (MessageList, InputBar, SettingsPanel)
 - [x] Removed built-in WAAPI and Wwise tools pending MCP integration
-- [ ] npm install + first run validation
-- [ ] MCP Host initial integration
+- [x] MCP Host initial integration (@modelcontextprotocol/sdk Client)
+- [x] Multi-server MCP config support (mcp.config.json)
+- [x] Dynamic tool discovery and registration
+- [x] npm install + full typecheck validation
 
 **Phase 2:** MCP architecture (Wwise tools as independent MCP Server)  
 **Phase 3:** Local RAG knowledge base (LanceDB)  
@@ -146,13 +159,16 @@ npm run typecheck         # Both
 | **Framework** | Electron 31.x, React 18.x | Main + Renderer |
 | **Styling** | Tailwind CSS 3.x | Utility-first CSS |
 | **Language** | TypeScript 5.5 | Full type safety |
-| **LLM** | Vercel AI SDK 4.x + OpenRouter | Streaming + tool calling |
+| **LLM** | Vercel AI SDK 4.x + OpenRouter / Ollama | Streaming + tool calling |
 | **IPC** | Electron IPC (preload + context isolation) | Type-safe via ipc-channels.ts |
-| **Wwise Integration** | MCP (planned) | External MCP server owns WAAPI/WebSocket |
+| **MCP** | @modelcontextprotocol/sdk 1.18+| Multi-server host, stdio transport |
 | **Storage** | electron-store 8.x | Encrypted with OS keychain |
-| **Serialization** | Zod 3.x | Schema validation for tool parameters |
+| **Serialization** | Zod 3.x | Schema validation + JSON Schema → Zod mapping |
 
-**⚠️ Note:** This repository no longer maintains a direct WAAPI client. Keep Wwise transport and RPC logic in the future MCP server, not in the Electron app.
+**ℹ️ Current Phase:** Phase 1 complete. MCP Host framework operational. Ready for external MCP servers.
+- App loads `mcp.config.json` at startup and dynamically registers tools from external MCP servers.
+- Supports tool filtering, timeout protection, and namespace isolation via `toolPrefix`.
+- WAAPI/WebSocket logic stays in future Wwise MCP server, not in Electron app.
 
 ---
 
@@ -161,22 +177,80 @@ npm run typecheck         # Both
 - **Context isolation:** Enabled (`contextIsolation: true` in [src/main/index.ts](../src/main/index.ts))
 - **API keys:** Encrypted in electron-store using OS keychain (`safeStorage`)
 - **Preload script:** Implemented at [src/preload/index.ts](../src/preload/index.ts), exposes `window.api` with `invoke/on/once/send`
+- **MCP Process Spawn:** Child MCP server processes inherit minimal environment; all credentials passed explicitly via env config.
 
 ---
 
-## Next Steps for AI Agents
+## Next Steps for Continuing Phase 2
 
-When implementing features:
-1. Check [MVP.md](../docs/MVP.md) for acceptance criteria
-2. Verify channel types are defined in [ipc-channels.ts](../src/shared/ipc-channels.ts)
-3. Follow naming conventions in existing code
-4. Run `npm run typecheck` before committing
-5. Document new IPC channels and services in this file or refer existing docs
+### Priority 1: Tool Grouping Architecture (Mixed Tool Sources)
+When multiple MCP servers + built-in tools need to coexist intelligently:
+1. Extend `mcp.config.json` to support `toolGroups` field (see [DEVELOPMENT.md § 6.4](../docs/DEVELOPMENT.md#64-混合工具源架构工具分组与优先级阶段二后期设计))
+2. Enhance `src/main/services/mcp-host.ts`:
+   - Add `ToolGroupConfig` interface
+   - Implement `toolGroupRegistry` to manage groups by priority
+   - Implement `getToolsByPriority(maxTokens)` for context-aware tool selection
+3. Create `src/main/tools/built-in.ts` for app-native tools (project queries, config, etc.)
+4. Update LLM `SYSTEM_PROMPT` to dynamically list available tool groups
+5. Optional: Implement context-adaptive tool filtering based on remaining LLM tokens
+
+### Priority 2: MCP Server Integration
+1. Create external Wwise MCP Server package (separate repository - `packages/mcp-server-wwise`)
+2. Update `mcp.config.json` with your server launch command and parameters
+3. Run `npm run dev` and verify server connects (check console logs `[mcp]` prefix)
+4. Test tool calling via chat UI
+5. Document available tools in README and server-side code
+
+### Priority 3: App Feature Extension
+1. New IPC channels → define in [ipc-channels.ts](../src/shared/ipc-channels.ts) first
+2. New services → add to `src/main/services/` following [storeService](../src/main/services/store.ts) pattern
+3. New React components → place in [src/renderer/src/components/](../src/renderer/src/components/) with Tailwind styling
+4. MCP service management UI → extend Settings panel with:
+   - Connected servers list + status
+   - Tool groups display (priority, context budget, enabled state)
+   - Tool search / filtering
+5. Run `npm run typecheck` after all changes; commit only when passing
+
+### Architecture: Tool Execution (Not via OpenRouter API)
+
+**Key Clarification:** Tools are NOT executed through OpenRouter API. All tool definition, validation, and execution happen locally:
+
+```
+Local (Main Process)
+├── MCP Servers + Built-in Tools + Tool Groups
+└── allTools {} (Zod schema + execute functions)
+        ↓
+        → AI SDK (validate params, control flow)
+        ↓
+      Send tool names + params to OpenRouter LLM
+        ↓
+LLM 推理：根据上下文选择合适的工具
+        ↓
+Main process 本地执行工具 (stdio, file ops, queries, etc.)
+        ↓
+结果返回给 LLM 继续推理
+```
+
+**Benefits:**
+- Low latency (local execution, no API roundtrips)
+- Privacy (tool params/results stay local)
+- Cost-effective (only LLM tokens counted)
+- Flexible (add/remove tools anytime without API changes)
+
+### Testing MCP Integration
+- Enable debug logs: `UNIAUDIO_DEBUG=mcp` (future enhancement)
+- Verify server connects at startup (console `[mcp] Connected server ...`)
+- Test tool timeout: simulate slow MCP responses (should timeout gracefully)
+- Test tool call/result streaming: verify `CHAT_TOOL_CALL` messages appear in chat UI
+- Test tool group filtering: verify high-priority tools always included, low-priority culled under context pressure
 
 ---
 
 ## Troubleshooting
 
 - **Hot reload not working** → Ensure you ran `npm run dev` not just `npm run build`
-- **Type errors across processes** → Check you're using the correct `tsconfig` path
-- **Wwise workflows unavailable** → Expected in current phase; Wwise operations will return after MCP integration lands
+- **Type errors across processes** → Check you're using the correct `tsconfig` path, especially MCP SDK imports need `.js` extension
+- **MCP server fails to connect** → Check command path, process launch permissions, and environment variables; review console `[mcp]` error logs
+- **MCP tool not showing up** → Verify `toolPrefix`, `includeTools` filtering, and `listTools()` output from server
+- **Tool call timeout** → Increase `timeoutMs` in config, or check if MCP server is overloaded/slow
+- **Too many tools in context** → Implement tool grouping with priorities to dynamically cull low-priority tools (see [DEVELOPMENT.md § 6.4](../docs/DEVELOPMENT.md#64-混合工具源架构工具分组与优先级阶段二后期设计))

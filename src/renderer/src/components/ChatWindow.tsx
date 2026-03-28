@@ -3,7 +3,9 @@ import InputBar from './InputBar'
 import { useChat } from '../hooks/useChat'
 
 export default function ChatWindow(): JSX.Element {
-  const { messages, isLoading, sendMessage, clearMessages } = useChat()
+  const { currentSession, isLoading, sendMessage, clearMessages } = useChat()
+
+  const messages = currentSession?.messages || []
 
   return (
     <div className="flex flex-col h-full">

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupChatHandlers } from './ipc/chat'
 import { setupSettingsHandlers } from './ipc/settings'
+import { initializeMcpHost, shutdownMcpHost } from './services/mcp-host'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -52,6 +53,10 @@ app.whenReady().then(() => {
   setupChatHandlers()
   setupSettingsHandlers()
 
+  initializeMcpHost().catch((err) => {
+    console.error('[mcp] Host initialization failed:', err)
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -59,4 +64,10 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  shutdownMcpHost().catch((err) => {
+    console.error('[mcp] Host shutdown failed:', err)
+  })
 })

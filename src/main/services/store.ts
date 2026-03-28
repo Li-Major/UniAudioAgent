@@ -1,12 +1,15 @@
 import Store from 'electron-store'
 import { safeStorage } from 'electron'
-import type { AppSettings } from '../../shared/types'
+import { randomUUID } from 'crypto'
+import type { AppSettings, ChatSession } from '../../shared/types'
 
 interface StoreSchema {
   llmProvider: 'openrouter' | 'ollama'
   ollamaBaseUrl: string
   defaultModel: string
   openrouterApiKeyEncrypted: string
+  chatSessions: ChatSession[]
+  currentSessionId: string
 }
 
 const store = new Store<StoreSchema>({
@@ -15,6 +18,8 @@ const store = new Store<StoreSchema>({
     ollamaBaseUrl: 'http://127.0.0.1:11434/api',
     defaultModel: 'anthropic/claude-3-5-sonnet',
     openrouterApiKeyEncrypted: '',
+    chatSessions: [],
+    currentSessionId: '',
   },
 })
 
@@ -69,5 +74,58 @@ export const storeService = {
     if (partial.defaultModel !== undefined) {
       store.set('defaultModel', partial.defaultModel)
     }
+  },
+
+  // Chat Sessions
+  getAllSessions(): ChatSession[] {
+    return store.get('chatSessions') || []
+  },
+
+  createSession(title: string): ChatSession {
+    const session: ChatSession = {
+      id: randomUUID(),
+      title,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const sessions = this.getAllSessions()
+    sessions.push(session)
+    store.set('chatSessions', sessions)
+    store.set('currentSessionId', session.id)
+    return session
+  },
+
+  getSession(id: string): ChatSession | null {
+    const sessions = this.getAllSessions()
+    return sessions.find((s) => s.id === id) || null
+  },
+
+  saveSession(session: ChatSession): void {
+    const sessions = this.getAllSessions()
+    const index = sessions.findIndex((s) => s.id === session.id)
+    if (index >= 0) {
+      sessions[index] = { ...session, updatedAt: Date.now() }
+    } else {
+      sessions.push({ ...session, createdAt: Date.now(), updatedAt: Date.now() })
+    }
+    store.set('chatSessions', sessions)
+    store.set('currentSessionId', session.id)
+  },
+
+  deleteSession(id: string): void {
+    const sessions = this.getAllSessions().filter((s) => s.id !== id)
+    store.set('chatSessions', sessions)
+    if (store.get('currentSessionId') === id) {
+      store.set('currentSessionId', sessions[0]?.id || '')
+    }
+  },
+
+  getCurrentSessionId(): string {
+    return store.get('currentSessionId') || ''
+  },
+
+  setCurrentSessionId(id: string): void {
+    store.set('currentSessionId', id)
   },
 }

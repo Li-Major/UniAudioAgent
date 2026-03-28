@@ -1,5 +1,15 @@
+import type { ToolSet } from 'ai'
+
 /**
- * Direct Wwise tools have been removed from the app.
- * Future tool execution will be provided through MCP integration.
+ * Runtime tool registry consumed by AI SDK.
+ * MCP host will hydrate this object during app startup.
  */
-export const allTools = {}
+export const allTools: ToolSet = {}
+
+export function replaceAllTools(nextTools: ToolSet): void {
+	for (const key of Object.keys(allTools)) {
+		delete allTools[key]
+	}
+
+	Object.assign(allTools, nextTools)
+}

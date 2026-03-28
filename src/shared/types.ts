@@ -7,6 +7,14 @@ export interface ChatMessage {
   toolCalls?: ToolCallInfo[]
 }
 
+export interface ChatSession {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface ToolCallInfo {
   toolName: string
   args: Record<string, unknown>

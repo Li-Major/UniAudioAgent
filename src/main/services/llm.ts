@@ -61,6 +61,12 @@ export async function streamChatToRenderer(
         case 'text-delta':
           sender.send(IPC.CHAT_DELTA, part.textDelta)
           break
+        case 'tool-call':
+          sender.send(IPC.CHAT_TOOL_CALL, {
+            toolName: part.toolName,
+            args: part.args,
+          })
+          break
         case 'error':
           sender.send(IPC.CHAT_ERROR, String(part.error))
           break

@@ -22,21 +22,40 @@
 **目标**：将工具层升级为 MCP 协议标准，实现外部扩展与生态互通。
 
 **核心变化**
-- App 不再直接发起 WAAPI WebSocket 连接
-- 内置 Wwise Tools 迁移为独立内部 MCP Server（stdio 传输，App 启动时自动拉起）
-- App 主进程成为 MCP Host，通过配置文件（`mcp.config.json`）连接任意外部 MCP Server
-- 使用 `@modelcontextprotocol/sdk` 的 `Client` 动态发现并注册工具
-- 将 Wwise MCP Server 作为独立 npm 包发布，可被 Claude Desktop、Cursor 等 MCP 宿主使用
+- [x] App 主进程成为 MCP Host，通过配置文件（`mcp.config.json`）连接任意外部 MCP Server
+- [x] 使用 `@modelcontextprotocol/sdk` 的 `Client` 动态发现并注册工具
+- [x] 支持 stdio 传输、工具过滤、命名空间隔离（prefix__toolName）
+- [x] MCP 工具调用支持超时保护与错误恢复
+- [ ] **工具分组架构**：混合工具源（多MCP + 内置）的智能优先级与context预算管理
+- [ ] 内置 Wwise Tools 迁移为独立内部 MCP Server（stdio 传输，App 启动时自动拉起）
+- [ ] 将 Wwise MCP Server 作为独立 npm 包发布，可被 Claude Desktop、Cursor 等 MCP 宿主使用
 
 **用户体验**
 - 升级对最终用户无感知；高级用户可在配置中接入自定义 MCP Server
-- 新增 MCP 服务管理面板（添加/删除/启用外部服务）
+- 后续新增 MCP 服务管理面板（添加/删除/启用外部服务、查看注册工具列表）
 
-**关键交付**
-- `packages/mcp-server-wwise`：独立 Wwise MCP Server 包（可单独安装/使用）
-- App 支持通过 `mcp.config.json` 加载外部 MCP Server
-- MCP 工具发现与动态注册机制
-- MCP 服务管理 UI
+**已完成交付**
+- [x] MCP Host 核心框架（src/main/services/mcp-host.ts）
+- [x] App 支持通过 `mcp.config.json` 加载外部 MCP Server
+- [x] MCP 工具发现与动态注册机制
+- [x] 配置文档与标准格式说明
+
+**待完成交付（优先级从高到低）**
+- [ ] **工具分组框架** — 扩展 MCP Host 支持工具分组、优先级与 context 预算
+  - 支持 `toolGroups` 配置字段
+  - 实现 `toolGroupRegistry` 与分组管理
+  - 实现 `getToolsByPriority()` 动态工具集选择
+  - System Prompt 动态生成
+- [ ] **应用内置工具库** — 定义项目查询、配置等内置工具
+  - `src/main/tools/built-in.ts`：project__getInfo, project__listRecent 等
+  - 在工具分组中注册为 "project" 组
+- [ ] **外部 Wwise MCP Server 包** — 独立仓库 `packages/mcp-server-wwise`
+  - 支持 stdio 传输
+  - 完整 WAAPI 工具覆盖
+  - 可被 Claude Desktop 等宿主使用
+- [ ] **MCP 服务管理 UI** — Settings 面板扩展
+  - 显示已连接服务列表与状态
+  - 显示注册工具分组信息（优先级、context预算、当前启用状态）
 
 ---
 
