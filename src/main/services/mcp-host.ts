@@ -261,6 +261,64 @@ function mergedProcessEnv(extra?: Record<string, string>): Record<string, string
   return env
 }
 
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
+  }
+
+  return JSON.stringify(value)
+}
+
+function buildMcpToolErrorResult(params: {
+  code: string
+  message: string
+  serverId: string
+  registeredName: string
+  rawToolName: string
+  input: unknown
+  durationMs?: number
+  timeoutMs: number
+}): Record<string, unknown> {
+  const {
+    code,
+    message,
+    serverId,
+    registeredName,
+    rawToolName,
+    input,
+    durationMs,
+    timeoutMs,
+  } = params
+
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      serverId,
+      toolName: registeredName,
+      rawToolName,
+      durationMs,
+      timeoutMs,
+    },
+    input,
+    nextAction: {
+      instruction:
+        'Do not retry with identical arguments. Analyze the error, infer the likely invalid/missing parameters, then call the tool again with revised arguments.',
+      checklist: [
+        'Check required fields and field names.',
+        'Check parameter value types and enum-like constraints.',
+        'If timeout occurs, narrow scope or use smaller payload.',
+      ],
+    },
+  }
+}
+
 async function createServerTools(server: McpServerConfig): Promise<{ client: Client; tools: ToolSet }> {
   const client = new Client({
     name: 'uni-audio-agent',
@@ -288,12 +346,49 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
 
     const registeredName = buildRegisteredName(server, rawToolName)
     const timeoutMs = server.timeoutMs ?? 30000
+    const failedCallSignatures = new Map<string, { at: number; error: string }>()
+    const repeatedFailureWindowMs = 2 * 60 * 1000
 
     tools[registeredName] = tool({
       description: remoteTool.description ?? `MCP tool: ${rawToolName}`,
       parameters: schemaToZod(remoteTool.inputSchema),
       execute: async (input) => {
         const startedAt = Date.now()
+        const argsSignature = stableStringify(input)
+        const now = Date.now()
+
+        for (const [key, item] of failedCallSignatures.entries()) {
+          if (now - item.at > repeatedFailureWindowMs) {
+            failedCallSignatures.delete(key)
+          }
+        }
+
+        const previousFailure = failedCallSignatures.get(argsSignature)
+        if (previousFailure) {
+          const repeatedError = `Repeated failed MCP call with identical arguments: ${registeredName}`
+          logLlmDebug('tool-exec-error', {
+            source: 'mcp',
+            serverId: server.id,
+            toolName: registeredName,
+            rawToolName,
+            durationMs: 0,
+            error: repeatedError,
+            previousError: previousFailure.error,
+            input,
+          })
+
+          return buildMcpToolErrorResult({
+            code: 'mcp_repeated_failed_args',
+            message: `${repeatedError}. Analyze previous error and adjust arguments before trying again.`,
+            serverId: server.id,
+            registeredName,
+            rawToolName,
+            input,
+            durationMs: 0,
+            timeoutMs,
+          })
+        }
+
         logLlmDebug('tool-exec-start', {
           source: 'mcp',
           serverId: server.id,
@@ -309,6 +404,7 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
 
         try {
           const result = await Promise.race([run, timeout])
+          failedCallSignatures.delete(argsSignature)
           logLlmDebug('tool-exec-result', {
             source: 'mcp',
             serverId: server.id,
@@ -319,15 +415,33 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
           })
           return result
         } catch (err) {
+          const error = String(err)
+          failedCallSignatures.set(argsSignature, {
+            at: Date.now(),
+            error,
+          })
+
           logLlmDebug('tool-exec-error', {
             source: 'mcp',
             serverId: server.id,
             toolName: registeredName,
             rawToolName,
             durationMs: Date.now() - startedAt,
-            error: String(err),
+            error,
           })
-          return { error: String(err) }
+
+          const errorCode = error.includes('timeout') ? 'mcp_tool_timeout' : 'mcp_tool_error'
+
+          return buildMcpToolErrorResult({
+            code: errorCode,
+            message: error,
+            serverId: server.id,
+            registeredName,
+            rawToolName,
+            input,
+            durationMs: Date.now() - startedAt,
+            timeoutMs,
+          })
         }
       },
     })
