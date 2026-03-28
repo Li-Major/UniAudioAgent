@@ -56,9 +56,11 @@ UniAudioAgent/
 │   │   ├── index.ts              # 入口：创建窗口、注册 IPC、启动服务
 │   │   ├── services/
 │   │   │   ├── store.ts          # electron-store + safeStorage 封装
-│   │   │   └── llm.ts            # Vercel AI SDK streamText 封装
+│   │       ├── llm.ts            # Vercel AI SDK streamText 封装
+│   │       └── mcp-host.ts       # MCP Host：加载配置、连接服务、动态注册工具
 │   │   ├── tools/
-│   │   │   └── index.ts          # 工具注册表（当前为空，等待 MCP 动态接入）
+│   │   │   ├── index.ts          # 工具注册表（builtin + mcp 两层合并）
+│   │   │   └── built-in.ts       # 内置工具（文件I/O、Shell等，随App常驻）
 │   │   └── ipc/
 │   │       ├── chat.ts           # chat:send handler（流式推送）
 │   │       └── settings.ts       # settings:get / settings:set
@@ -116,19 +118,31 @@ invoke resolves void  <───────────────────
 
 ### 4.2 Tool 接入规范
 
-当前仓库不再内置 Wwise Tool。后续接入方式：
-- 由 MCP Host 在主进程动态发现外部 MCP Server 提供的工具
-- 将 MCP 工具映射为 AI SDK 可调用工具，再注册到 `allTools`
-- 工具实现与 WebSocket 连接均下沉到 MCP Server，不放在 Electron App 内
+工具层分为两类，共同注册到 `allTools` 供 AI SDK 使用：
 
-如果需要临时保留本地工具，仍然遵守以下约定：
+#### 内置工具（Built-in Tools）
+
+定义在 `src/main/tools/built-in.ts`，随 App 启动常驻，无需任何配置。当前内置工具一览：
+
+| 工具名 | 功能 | 实现 |
+|---|---|---|
+| `read_file` | 读取文件文本内容 | `fs.readFile` |
+| `write_file` | 写入或创建文件（自动创建目录） | `fs.writeFile` |
+| `list_directory` | 列出目录下文件和子目录 | `fs.readdir` |
+| `get_directory_tree` | 递归生成目录树（可控深度） | 递归 `fs.readdir` |
+| `search_files` | 按文件名或内容关键词搜索 | 递归遍历 |
+| `exec_command` | 执行 Shell 命令（`execFile`） | `child_process.execFile` |
+
+**注意**：移除的是 Wwise 专属工具，通用工具（文件系统、Shell）以内置工具形式长期存在。
+
+添加新内置工具的约定：
 
 ```typescript
-// src/main/tools/myTool.ts
+// src/main/tools/built-in.ts（追加到此文件）
 import { tool } from 'ai'
 import { z } from 'zod'
 
-export const myTool = tool({
+const myTool = tool({
   // description 决定 LLM 何时调用本工具 — 必须准确描述"功能"与"适用场景"
   description: '...',
   parameters: z.object({
@@ -144,11 +158,30 @@ export const myTool = tool({
     }
   },
 })
+
+// 在文件末尾的 builtinTools 导出中加入
+export const builtinTools = { ..., myTool }
 ```
 
-在 `src/main/tools/index.ts` 中注册：
-```typescript
-export const allTools = { myTool, ...otherTools }
+#### MCP 工具（外部扩展工具）
+
+- 由 MCP Host 在主进程动态发现外部 MCP Server 提供的工具
+- 将 MCP 工具映射为 AI SDK 可调用工具，再注册到 `allTools`（追加，不覆盖内置工具）
+- 工具实现与外部连接（如 WAAPI WebSocket）均下沉到 MCP Server，不放在 Electron App 内
+- 工具名带前缀以区分来源（如 `wwise__getProjectInfo`）
+
+#### 工具注册架构
+
+```
+src/main/tools/index.ts
+│
+├── builtinTools  (built-in.ts) ← 常驻，App 启动时注册
+│
+└── mcpTools      (mcp-host.ts 动态写入) ← 按配置启动时注册
+         ↓
+       allTools = builtinTools + mcpTools
+         ↓
+       LLM (AI SDK streamText)
 ```
 
 ### 4.3 LLM 流式调用
@@ -188,11 +221,17 @@ ipcMain.handle(IPC.CHAT_SEND, async (event, messages: CoreMessage[]) => {
 
 ---
 
-## 六、新增 MCP / Tool 步骤
+## 六、新增工具步骤
 
+**新增内置工具（通用能力首选）：**
+1. 在 `src/main/tools/built-in.ts` 内用 `tool()` + `zod` 定义工具（参考 4.2 规范）
+2. 将工具加入文件末尾的 `builtinTools` 导出对象
+3. 更新 DEVELOPMENT.md §4.2 内置工具一览表
+
+**新增 MCP 外部工具（外部系统集成首选）：**
 1. 优先实现独立 MCP Server，由 MCP 侧负责外部连接与实际执行
-2. 在 App 主进程中为 MCP Client 增加发现、注册和生命周期管理
-3. 如需临时本地工具，再用 `tool()` + `zod` 定义并导出（参考 4.2 规范）
+2. 在 `mcp.config.json` 中新增服务配置条目
+3. `initializeMcpHost()` 会自动发现并注册工具，且不影响内置工具
 4. 在相关文档中补充能力边界和接入方式
 
 ### 6.1 MCP Host 生命周期与工具注册
@@ -295,139 +334,6 @@ z.object({
 - 嵌套与可选字段
 
 如遇到复杂 Schema 映射失败，会回退到 `z.any()` 并输出警告日志。
-
-### 6.4 混合工具源架构：工具分组与优先级（阶段二后期设计）
-
-**背景**：当同时接入多个外部 MCP Server 与应用内置工具时，工具集合可能超过 20+ 个，容易导致 LLM context 压力。需要在保持灵活性的同时，智能地向 LLM 暴露合适的工具集。
-
-**核心设计**
-
-1. **工具分组**：按功能域将工具组织为逻辑分组（如 Wwise、Assets、Project）
-2. **优先级**：每个分组有优先级，发生 context 压力时按优先级裁剪
-3. **Context 预算**：每个分组预估 token 占用量，动态调整可用工具集
-4. **动态加载**：根据对话上下文，选择性启用/禁用工具分组
-
-**配置示例**（扩展 `mcp.config.json`）
-
-```json
-{
-  "version": 1,
-  "toolGroups": [
-    {
-      "id": "wwise",
-      "name": "Wwise 工作流",
-      "priority": 10,
-      "description": "Wwise DAW 操作：查询对象、修改属性、导出事件和SoundBank",
-      "contextBudget": 3000,
-      "enabled": true
-    },
-    {
-      "id": "assets",
-      "name": "音频资产管理",
-      "priority": 20,
-      "description": "导入导出、格式转换、批量操作",
-      "contextBudget": 2000,
-      "enabled": true
-    },
-    {
-      "id": "project",
-      "name": "项目工具（应用内置）",
-      "priority": 30,
-      "description": "项目信息查询、配置管理、最近项目",
-      "contextBudget": 1500,
-      "enabled": true
-    }
-  ],
-  "servers": [
-    {
-      "id": "wwise",
-      "toolGroup": "wwise",
-      "enabled": true,
-      "transport": "stdio",
-      "command": "node",
-      "args": ["./mcp-wwise/dist/index.js"],
-      "toolPrefix": "wwise",
-      "timeoutMs": 30000
-    },
-    {
-      "id": "assets",
-      "toolGroup": "assets",
-      "enabled": true,
-      "transport": "stdio",
-      "command": "node",
-      "args": ["./mcp-assets/dist/index.js"],
-      "toolPrefix": "assets",
-      "timeoutMs": 25000
-    }
-  ]
-}
-```
-
-**实现要点**
-
-| 文件 | 职责 | 变更说明 |
-|---|---|---|
-| `src/main/tools/built-in.ts` | 应用内置工具 | 新增，定义 `project__*` 等内置工具 |
-| `src/main/tools/index.ts` | 工具注册表 | 新增 `loadInternalTools()` + `getToolsByPriority()` |
-| `src/main/services/mcp-host.ts` | MCP Host | 新增 `ToolGroupConfig`、`toolGroupRegistry` 管理 |
-| `src/main/services/llm.ts` | LLM 调用 | 可选：根据 context 使用 `getToolsByPriority()` 动态选择工具集 |
-| `mcp.config.json` | 配置文件 | 新增 `toolGroups` 字段 |
-
-**工具命名规范**
-
-所有来自 MCP 的工具使用 `prefix__toolName` 格式（自动）；应用内置工具使用 `project__toolName` 格式（手动）。
-
-示例：
-```
-wwise__getProjectInfo
-wwise__findObjects
-wwise__setProperty
-assets__importAudio
-assets__listAssets
-project__getProjectInfo
-project__listRecentProjects
-```
-
-**LLM System Prompt 动态适配**
-
-当启用工具分组后，System Prompt 可动态生成，告知 LLM 当前可用的工具分组及其用途：
-
-```typescript
-const systemPrompt = (availableGroups: ToolGroupConfig[]): string => {
-  const groupList = availableGroups
-    .map(g => `- **${g.name}**（${g.id}）: ${g.description}`)
-    .join('\n')
-
-  return `你是 UniAudioAgent，一个专业的游戏音频助手。
-
-可用工具分组（按优先级）：
-${groupList}
-
-工具调用原则：
-1. 该分组内的工具名均为 \`分组id__工具名\` 的格式
-2. 优先使用优先级高的分组（Wwise > 资产管理 > 项目）
-3. 不要调用不存在的工具
-4. 工具返回错误时，向用户解释原因而不是重复尝试
-
-...（其他 prompt 内容）`
-}
-```
-
-**后续实现路线**
-
-1. **Phase 2A（当前）**：多 MCP Server 负载均衡（已完成）
-2. **Phase 2B（后续）**：工具分组架构框架（需实现）
-   - 扩展配置文件支持 `toolGroups` 字段
-   - 增强 MCP Host 支持分组管理与优先级
-   - 实现 `getToolsByPriority()` 动态工具集选择
-3. **Phase 2C（可选）**：Context 自适应降级
-   - 估算当前 LLM 剩余 context tokens
-   - 根据剩余空间自动选择最高优先级的工具组
-   - UI 显示当前启用的工具组信息
-4. **Phase 3**：RAG 与工具建议
-   - 根据知识库内容，智能推荐相关工具分组
-   - "啊，你要做 Wwise Event 命名检查，我建议启用 Wwise 工具组"
-
 ---
 
 ## 七、开发命令

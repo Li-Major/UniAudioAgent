@@ -1,15 +1,24 @@
 import type { ToolSet } from 'ai'
+import { builtinTools } from './built-in'
 
 /**
- * Runtime tool registry consumed by AI SDK.
- * MCP host will hydrate this object during app startup.
+ * Builtin tools are always registered (file I/O, shell, etc.)
+ * MCP tools are dynamic and replaced on each MCP host (re)initialization.
  */
-export const allTools: ToolSet = {}
+const mcpTools: ToolSet = {}
 
-export function replaceAllTools(nextTools: ToolSet): void {
-	for (const key of Object.keys(allTools)) {
+/** Unified tool registry consumed by the AI SDK — builtin + MCP tools merged. */
+export const allTools: ToolSet = { ...builtinTools }
+
+export function replaceMcpTools(nextMcpTools: ToolSet): void {
+	// Remove all previously registered MCP tools
+	for (const key of Object.keys(mcpTools)) {
+		delete mcpTools[key]
 		delete allTools[key]
 	}
 
-	Object.assign(allTools, nextTools)
+	// Register new MCP tools
+	Object.assign(mcpTools, nextMcpTools)
+	Object.assign(allTools, mcpTools)
 }
+

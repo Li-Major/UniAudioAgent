@@ -5,9 +5,9 @@ export const IPC = {
   CHAT_SEND: 'chat:send',
   /** main → renderer: text token streamed from the LLM */
   CHAT_DELTA: 'chat:delta',
-  /** main → renderer: a Wwise tool was called */
+  /** main → renderer: a tool was called */
   CHAT_TOOL_CALL: 'chat:tool-call',
-  /** main → renderer: a Wwise tool returned a result */
+  /** main → renderer: a tool returned a result */
   CHAT_TOOL_RESULT: 'chat:tool-result',
   /** main → renderer: streaming finished */
   CHAT_DONE: 'chat:done',

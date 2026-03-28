@@ -6,17 +6,6 @@
 
 ---
 
-## Project intent
-
-- Think carefully about the core value proposition and user needs before adding features.
-- Try to find a best solution that can be implemented in a simple way, rather than adding complex features or abstractions.
-- Keep the codebase simple and maintainable, even if it means not implementing some features or optimizations.
-- Prefer adding small, representative, composable capabilities over broad unfinished abstractions.
-- Prefer minimal, local changes.
-- Keep terms in English even when writing documents in Chinese.
-- When done something, check if you need to documents. If so, add to existing docs or create new ones as needed.
-
-
 ## Quick Start
 
 ### Commands
@@ -127,10 +116,15 @@ See [ROADMAP.md](../docs/ROADMAP.md) for full roadmap.
 4. Call from renderer via `ipcRenderer.invoke()` or `ipcRenderer.on()`
 
 ### Adding a new tool
-1. Prefer implementing it in an MCP Server instead of directly in the Electron app
-2. If a temporary local tool is necessary, add it under [src/main/tools/](../src/main/tools/)
-3. Export with `tool({ description, parameters: z.object({...}), execute })`
-4. Import and add to `allTools` in [src/main/tools/index.ts](../src/main/tools/index.ts)
+
+**Built-in tool** (general-purpose capabilities — file I/O, shell, etc.):
+1. Add the tool to `src/main/tools/built-in.ts` using `tool({ description, parameters: z.object({...}), execute })`
+2. Export it from the `builtinTools` object at the bottom of the file
+3. Builtin tools are automatically included in `allTools` at startup — no changes to `index.ts` needed
+
+**MCP tool** (external system integrations — Wwise, DAW, etc.):
+1. Prefer implementing as an independent MCP Server package
+2. Add a server entry to `mcp.config.json`; `initializeMcpHost()` handles discovery automatically
 
 ### Running type checks
 ```powershell
@@ -183,25 +177,14 @@ npm run typecheck         # Both
 
 ## Next Steps for Continuing Phase 2
 
-### Priority 1: Tool Grouping Architecture (Mixed Tool Sources)
-When multiple MCP servers + built-in tools need to coexist intelligently:
-1. Extend `mcp.config.json` to support `toolGroups` field (see [DEVELOPMENT.md § 6.4](../docs/DEVELOPMENT.md#64-混合工具源架构工具分组与优先级阶段二后期设计))
-2. Enhance `src/main/services/mcp-host.ts`:
-   - Add `ToolGroupConfig` interface
-   - Implement `toolGroupRegistry` to manage groups by priority
-   - Implement `getToolsByPriority(maxTokens)` for context-aware tool selection
-3. Create `src/main/tools/built-in.ts` for app-native tools (project queries, config, etc.)
-4. Update LLM `SYSTEM_PROMPT` to dynamically list available tool groups
-5. Optional: Implement context-adaptive tool filtering based on remaining LLM tokens
 
-### Priority 2: MCP Server Integration
-1. Create external Wwise MCP Server package (separate repository - `packages/mcp-server-wwise`)
-2. Update `mcp.config.json` with your server launch command and parameters
-3. Run `npm run dev` and verify server connects (check console logs `[mcp]` prefix)
-4. Test tool calling via chat UI
-5. Document available tools in README and server-side code
+### Priority 1: MCP Server Integration
+1. Update `mcp.config.json` with your server launch command and parameters
+2. Run `npm run dev` and verify server connects (check console logs `[mcp]` prefix)
+3. Test tool calling via chat UI
+4. Document available tools in README and server-side code
 
-### Priority 3: App Feature Extension
+### Priority 2: App Feature Extension
 1. New IPC channels → define in [ipc-channels.ts](../src/shared/ipc-channels.ts) first
 2. New services → add to `src/main/services/` following [storeService](../src/main/services/store.ts) pattern
 3. New React components → place in [src/renderer/src/components/](../src/renderer/src/components/) with Tailwind styling

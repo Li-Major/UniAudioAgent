@@ -46,9 +46,9 @@
   - 实现 `toolGroupRegistry` 与分组管理
   - 实现 `getToolsByPriority()` 动态工具集选择
   - System Prompt 动态生成
-- [ ] **应用内置工具库** — 定义项目查询、配置等内置工具
-  - `src/main/tools/built-in.ts`：project__getInfo, project__listRecent 等
-  - 在工具分组中注册为 "project" 组
+- [x] **应用内置工具库** — 文件系统与 Shell 内置工具（常驻，所有对话默认可用）
+  - `src/main/tools/built-in.ts` 实现 6 个工具：`read_file`、`write_file`、`list_directory`、`get_directory_tree`、`search_files`、`exec_command`
+  - `src/main/tools/index.ts` 采用 builtin + mcp 分层合并，MCP 重载不影响内置工具
 - [ ] **外部 Wwise MCP Server 包** — 独立仓库 `packages/mcp-server-wwise`
   - 支持 stdio 传输
   - 完整 WAAPI 工具覆盖

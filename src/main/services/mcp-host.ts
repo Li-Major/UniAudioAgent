@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { tool, type ToolSet } from 'ai'
 import { z, type ZodTypeAny } from 'zod'
-import { replaceAllTools } from '../tools'
+import { replaceMcpTools } from '../tools'
 
 type McpTransport = 'stdio'
 
@@ -247,8 +247,8 @@ export async function initializeMcpHost(): Promise<void> {
     }
   }
 
-  replaceAllTools(nextTools)
-  console.info(`[mcp] Registered total tools: ${Object.keys(nextTools).length}`)
+  replaceMcpTools(nextTools)
+  console.info(`[mcp] Registered MCP tools: ${Object.keys(nextTools).length}`)
 }
 
 export async function shutdownMcpHost(): Promise<void> {
@@ -259,5 +259,5 @@ export async function shutdownMcpHost(): Promise<void> {
 
   await Promise.allSettled(closing)
   activeClients.clear()
-  replaceAllTools({})
+  replaceMcpTools({})
 }
