@@ -7,6 +7,54 @@ import { allTools } from '../tools'
 import { storeService } from './store'
 import { IPC } from '../../shared/ipc-channels'
 
+function isLlmDebugEnabled(): boolean {
+  const debugFlags = process.env.UNIAUDIO_DEBUG ?? ''
+  return debugFlags === '1' || debugFlags.split(',').some((flag) => flag.trim().toLowerCase() === 'llm')
+}
+
+function serializeDebugPayload(value: unknown): string {
+  const seen = new WeakSet<object>()
+
+  return JSON.stringify(
+    value,
+    (_key, currentValue) => {
+      if (typeof currentValue === 'string' && currentValue.length > 4000) {
+        return `${currentValue.slice(0, 4000)}... [truncated ${currentValue.length - 4000} chars]`
+      }
+
+      if (typeof currentValue === 'bigint') {
+        return currentValue.toString()
+      }
+
+      if (currentValue instanceof Error) {
+        return {
+          name: currentValue.name,
+          message: currentValue.message,
+          stack: currentValue.stack,
+        }
+      }
+
+      if (typeof currentValue === 'object' && currentValue !== null) {
+        if (seen.has(currentValue)) {
+          return '[Circular]'
+        }
+        seen.add(currentValue)
+      }
+
+      return currentValue
+    },
+    2,
+  )
+}
+
+function logLlmDebug(event: string, payload: unknown): void {
+  if (!isLlmDebugEnabled()) {
+    return
+  }
+
+  console.info(`[llm-debug] ${event}\n${serializeDebugPayload(payload)}`)
+}
+
 const SYSTEM_PROMPT = `你是 UniAudioAgent，一个专业的游戏音频助手。你帮助音频设计师通过自然语言完成工作，包括与 Wwise 音频中间件交互。
 
 内置工具能力（始终可用）：
@@ -32,11 +80,13 @@ export async function streamChatToRenderer(
   sender: WebContents,
 ): Promise<void> {
   const settings = storeService.getSettings()
+  const requestId = `llm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   try {
     let modelFactory: ((modelId: string) => ReturnType<ReturnType<typeof createOpenRouter>>) | ((modelId: string) => ReturnType<ReturnType<typeof createOllama>>)
+    const provider = settings.llmProvider
 
-    if (settings.llmProvider === 'ollama') {
+    if (provider === 'ollama') {
       const ollama = createOllama({ baseURL: settings.ollamaBaseUrl })
       modelFactory = ollama
     } else {
@@ -50,6 +100,15 @@ export async function streamChatToRenderer(
       modelFactory = openrouter
     }
 
+    logLlmDebug('request', {
+      requestId,
+      provider,
+      model: settings.defaultModel,
+      toolNames: Object.keys(allTools),
+      system: SYSTEM_PROMPT,
+      messages,
+    })
+
     const result = streamText({
       model: modelFactory(settings.defaultModel),
       messages,
@@ -60,6 +119,7 @@ export async function streamChatToRenderer(
 
     for await (const part of result.fullStream) {
       if (sender.isDestroyed()) break
+      logLlmDebug('stream-part', { requestId, part })
 
       switch (part.type) {
         case 'text-delta':
@@ -77,8 +137,10 @@ export async function streamChatToRenderer(
       }
     }
 
+    logLlmDebug('done', { requestId })
     sender.send(IPC.CHAT_DONE)
   } catch (err) {
+    logLlmDebug('failure', { requestId, error: err })
     if (!sender.isDestroyed()) {
       sender.send(IPC.CHAT_ERROR, `LLM 调用失败: ${String(err)}`)
       sender.send(IPC.CHAT_DONE)

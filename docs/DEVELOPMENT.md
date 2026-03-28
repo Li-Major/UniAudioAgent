@@ -334,6 +334,24 @@ z.object({
 - 嵌套与可选字段
 
 如遇到复杂 Schema 映射失败，会回退到 `z.any()` 并输出警告日志。
+
+### 6.4 LLM 输入输出调试
+
+开发时可通过环境变量开启主进程日志：
+
+- PowerShell：`$env:UNIAUDIO_DEBUG='llm'; npm run dev`
+- cmd：`set UNIAUDIO_DEBUG=llm && npm run dev`
+
+开启后，主进程终端会输出以下日志：
+
+- `[llm-debug] request`：送入 AI SDK 的标准化请求，包含 `provider`、`model`、`toolNames`、`system`、`messages`
+- `[llm-debug] stream-part`：`streamText(...).fullStream` 返回的每个标准化分片
+- `[llm-debug] done` / `[llm-debug] failure`：请求结束或失败
+
+注意事项：
+- 当前日志展示的是 **AI SDK 标准化后的输入/输出结构**，不是底层 OpenRouter/Ollama 的原始 HTTP JSON
+- 渲染进程发送到主进程的 `messages` 结构来自聊天历史，形如 `[{ role: 'user' | 'assistant', content: string }]`
+- 过长字符串会被截断，避免终端日志过大
 ---
 
 ## 七、开发命令
