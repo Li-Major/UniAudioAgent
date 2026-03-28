@@ -4,4 +4,4 @@
 - [ ] 新增UI界面，用于让用户查看当前工具拥有的工具及其状态
 - [ ] 删除底部常用模型的快捷入口
 - [ ] 增加token消耗指示
-- [ ] 给LLM更明确的提示，现在工具似乎默认会认为WWISE MCP的wwise__session.getConfig是用于查询wwise工程的连接状态，但实际上是用于查询wwise工程的连接配置信息。提升wwise__catalog.listDomains的使用优先级，让LLM更倾向于使用这个接口，先来获得它能对wwise执行什么操作的描述
+- [x] 给LLM更明确的提示，现在工具似乎默认会认为WWISE MCP的wwise__session.getConfig是用于查询wwise工程的连接状态，但实际上是用于查询wwise工程的连接配置信息。提升wwise__catalog.listDomains的使用优先级，让LLM更倾向于使用这个接口，先来获得它能对wwise执行什么操作的描述

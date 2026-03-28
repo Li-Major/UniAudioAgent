@@ -24,7 +24,7 @@
     "ollama-ai-provider": "^1.0.6",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "wwise-waapi-mcp": "^1.0.1",
+    "wwise-waapi-mcp": "^1.0.3",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.25.2"
   },

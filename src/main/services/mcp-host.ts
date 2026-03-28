@@ -163,12 +163,22 @@ function schemaToZod(schema: unknown): ZodTypeAny {
     return z.any()
   }
 
+  const withDescription = (base: ZodTypeAny, description?: string): ZodTypeAny => {
+    if (typeof description === 'string' && description.trim().length > 0) {
+      return base.describe(description)
+    }
+    return base
+  }
+
   const node = schema as {
     type?: string
+    description?: string
     properties?: Record<string, unknown>
     required?: string[]
     items?: unknown
     enum?: unknown[]
+    minimum?: number
+    maximum?: number
     anyOf?: unknown[]
     oneOf?: unknown[]
   }
@@ -176,10 +186,10 @@ function schemaToZod(schema: unknown): ZodTypeAny {
   if (Array.isArray(node.enum) && node.enum.length > 0) {
     const stringValues = node.enum.filter((v): v is string => typeof v === 'string')
     if (stringValues.length > 0) {
-      return z.enum(stringValues as [string, ...string[]])
+      return withDescription(z.enum(stringValues as [string, ...string[]]), node.description)
     }
 
-    return z.any()
+    return withDescription(z.any(), node.description)
   }
 
   if (Array.isArray(node.anyOf) && node.anyOf.length > 0) {
@@ -187,7 +197,10 @@ function schemaToZod(schema: unknown): ZodTypeAny {
       return schemaToZod(node.anyOf[0])
     }
 
-    return z.union(node.anyOf.map((item) => schemaToZod(item)) as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]])
+    return withDescription(
+      z.union(node.anyOf.map((item) => schemaToZod(item)) as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]),
+      node.description,
+    )
   }
 
   if (Array.isArray(node.oneOf) && node.oneOf.length > 0) {
@@ -195,20 +208,35 @@ function schemaToZod(schema: unknown): ZodTypeAny {
       return schemaToZod(node.oneOf[0])
     }
 
-    return z.union(node.oneOf.map((item) => schemaToZod(item)) as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]])
+    return withDescription(
+      z.union(node.oneOf.map((item) => schemaToZod(item)) as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]),
+      node.description,
+    )
   }
 
   switch (node.type) {
-    case 'string':
-      return z.string()
+    case 'string': {
+      return withDescription(z.string(), node.description)
+    }
     case 'number':
-      return z.number()
-    case 'integer':
-      return z.number().int()
-    case 'boolean':
-      return z.boolean()
-    case 'array':
-      return z.array(schemaToZod(node.items))
+    {
+      let schema = z.number()
+      if (typeof node.minimum === 'number') schema = schema.min(node.minimum)
+      if (typeof node.maximum === 'number') schema = schema.max(node.maximum)
+      return withDescription(schema, node.description)
+    }
+    case 'integer': {
+      let schema = z.number().int()
+      if (typeof node.minimum === 'number') schema = schema.min(node.minimum)
+      if (typeof node.maximum === 'number') schema = schema.max(node.maximum)
+      return withDescription(schema, node.description)
+    }
+    case 'boolean': {
+      return withDescription(z.boolean(), node.description)
+    }
+    case 'array': {
+      return withDescription(z.array(schemaToZod(node.items)), node.description)
+    }
     case 'object': {
       const shape: Record<string, ZodTypeAny> = {}
       const required = new Set(Array.isArray(node.required) ? node.required : [])
@@ -219,10 +247,10 @@ function schemaToZod(schema: unknown): ZodTypeAny {
         shape[key] = required.has(key) ? propertySchema : propertySchema.optional()
       }
 
-      return z.object(shape)
+      return withDescription(z.object(shape), node.description)
     }
     default:
-      return z.any()
+      return withDescription(z.any(), node.description)
   }
 }
 

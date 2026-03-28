@@ -190,6 +190,7 @@ async function streamOllamaWithTools(
     host,
     messageCount: ollamaMessages.length,
     toolNames: ollamaTools.map((t) => t.function.name),
+    tools: ollamaTools,
   })
 
   const maxSteps = 10
