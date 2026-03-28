@@ -138,6 +138,41 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
       setIsLoading(true)
 
       const cleanups: (() => void)[] = []
+      let finalized = false
+
+      const finalizeStream = (source: 'done-event' | 'invoke-fallback' | 'invoke-error'): void => {
+        if (finalized) return
+        finalized = true
+
+        streamingIdRef.current = null
+        setIsLoading(false)
+        cleanups.forEach((fn) => fn())
+
+        setCurrentSession((prev) => {
+          if (!prev) return prev
+
+          const normalized = {
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    toolCalls: (m.toolCalls ?? []).map((tc) =>
+                      tc.status === 'calling' ? { ...tc, status: 'done' as const } : tc,
+                    ),
+                  }
+                : m,
+            ),
+          }
+
+          saveCurrentSession(normalized)
+          return normalized
+        })
+
+        if (source !== 'done-event') {
+          console.warn(`[chat] Stream finalized via ${source} (CHAT_DONE was missed or delayed)`)
+        }
+      }
 
       cleanups.push(
         window.api.on(IPC.CHAT_DELTA, (delta) => {
@@ -230,17 +265,32 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
 
       cleanups.push(
         window.api.on(IPC.CHAT_DONE, () => {
-          streamingIdRef.current = null
-          setIsLoading(false)
-          cleanups.forEach((fn) => fn())
-          setCurrentSession((prev) => {
-            if (prev) saveCurrentSession(prev)
-            return prev
-          })
+          finalizeStream('done-event')
         }),
       )
 
-      await window.api.invoke(IPC.CHAT_SEND, historyForLLM)
+      try {
+        await window.api.invoke(IPC.CHAT_SEND, historyForLLM)
+      } catch (err) {
+        const id = streamingIdRef.current
+        setCurrentSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === id ? { ...m, content: m.content || `⚠️ 调用失败: ${String(err)}` } : m,
+                ),
+              }
+            : prev,
+        )
+        finalizeStream('invoke-error')
+      } finally {
+        // Fallback: if CHAT_DONE event is lost due IPC timing edge cases,
+        // finalize shortly after invoke resolves to avoid permanent loading state.
+        setTimeout(() => {
+          finalizeStream('invoke-fallback')
+        }, 300)
+      }
     },
     [isLoading, currentSession, saveCurrentSession],
   )

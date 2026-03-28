@@ -22,7 +22,7 @@ function ToolCallBadge({ name, status }: { name: string; status: string }): JSX.
   )
 }
 
-function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
+function MessageBubble({ message, showThinking }: { message: ChatMessage; showThinking: boolean }): JSX.Element {
   const isUser = message.role === 'user'
 
   return (
@@ -55,8 +55,10 @@ function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
           <div className="prose-chat selectable">
             {message.content ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            ) : (
+            ) : showThinking ? (
               <span className="text-gray-500 text-sm italic">思考中…</span>
+            ) : (
+              <span className="text-gray-500 text-sm italic">未返回文本结果（可能仅执行了工具调用）</span>
             )}
           </div>
         )}
@@ -76,7 +78,7 @@ function EmptyState(): JSX.Element {
       <div className="text-4xl mb-4">🎵</div>
       <h2 className="text-gray-300 font-semibold text-lg mb-2">UniAudioAgent</h2>
       <p className="text-gray-500 text-sm max-w-sm">
-        通过自然语言与 Wwise 交互。试试问"查看当前项目信息"或"搜索所有名称包含 Footstep 的 Sound"。
+        通过自然语言与各类音频工具交互。<br/>试试问<br/>"查看当前Wwise项目信息"<br/>或<br/>"搜索所有名称包含 Footstep 的 Wwise 对象"
       </p>
     </div>
   )
@@ -96,8 +98,14 @@ export default function MessageList({ messages, isLoading }: Props): JSX.Element
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">
-      {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+      {messages.map((m, idx) => (
+        <MessageBubble
+          key={m.id}
+          message={m}
+          showThinking={
+            isLoading && idx === messages.length - 1 && m.role === 'assistant' && m.content.length === 0
+          }
+        />
       ))}
       {isLoading && messages[messages.length - 1]?.role === 'assistant' && (
         <div /> // handled inside the last message bubble

@@ -6,6 +6,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { tool, type ToolSet } from 'ai'
 import { z, type ZodTypeAny } from 'zod'
 import { replaceMcpTools } from '../tools'
+import { logLlmDebug } from './debug-log'
 
 type McpTransport = 'stdio'
 
@@ -214,13 +215,42 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
       description: remoteTool.description ?? `MCP tool: ${rawToolName}`,
       parameters: schemaToZod(remoteTool.inputSchema),
       execute: async (input) => {
+        const startedAt = Date.now()
+        logLlmDebug('tool-exec-start', {
+          source: 'mcp',
+          serverId: server.id,
+          toolName: registeredName,
+          rawToolName,
+          input,
+        })
+
         const run = client.callTool({ name: rawToolName, arguments: input as Record<string, unknown> })
         const timeout = new Promise<never>((_resolve, reject) => {
           setTimeout(() => reject(new Error(`[mcp] Tool timeout after ${timeoutMs}ms: ${registeredName}`)), timeoutMs)
         })
 
-        const result = await Promise.race([run, timeout])
-        return result
+        try {
+          const result = await Promise.race([run, timeout])
+          logLlmDebug('tool-exec-result', {
+            source: 'mcp',
+            serverId: server.id,
+            toolName: registeredName,
+            rawToolName,
+            durationMs: Date.now() - startedAt,
+            result,
+          })
+          return result
+        } catch (err) {
+          logLlmDebug('tool-exec-error', {
+            source: 'mcp',
+            serverId: server.id,
+            toolName: registeredName,
+            rawToolName,
+            durationMs: Date.now() - startedAt,
+            error: String(err),
+          })
+          return { error: String(err) }
+        }
       },
     })
   }
@@ -253,9 +283,9 @@ export async function initializeMcpHost(): Promise<void> {
 
 export async function shutdownMcpHost(): Promise<void> {
   const closing: Promise<unknown>[] = []
-  for (const client of activeClients.values()) {
+  activeClients.forEach((client) => {
     closing.push(client.close())
-  }
+  })
 
   await Promise.allSettled(closing)
   activeClients.clear()

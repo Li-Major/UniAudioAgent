@@ -347,6 +347,7 @@ z.object({
 - `[llm-debug] request`：送入 AI SDK 的标准化请求，包含 `provider`、`model`、`toolNames`、`system`、`messages`
 - `[llm-debug] stream-part`：`streamText(...).fullStream` 返回的每个标准化分片
 - `[llm-debug] done` / `[llm-debug] failure`：请求结束或失败
+- 同时会镜像写入 Electron 日志目录下的 `llm-debug.log`（UTF-8 编码），用于绕开 Windows 控制台乱码
 
 注意事项：
 - 当前日志展示的是 **AI SDK 标准化后的输入/输出结构**，不是底层 OpenRouter/Ollama 的原始 HTTP JSON

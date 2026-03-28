@@ -4,8 +4,42 @@ import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { tool } from 'ai'
 import { z } from 'zod'
+import { logLlmDebug } from '../services/debug-log'
 
 const execFileAsync = promisify(execFile)
+
+async function runBuiltinTool<TInput, TResult>(
+  toolName: string,
+  input: TInput,
+  runner: () => Promise<TResult>,
+): Promise<TResult | { error: string }> {
+  const startedAt = Date.now()
+  logLlmDebug('tool-exec-start', {
+    source: 'builtin',
+    toolName,
+    input,
+  })
+
+  try {
+    const result = await runner()
+    logLlmDebug('tool-exec-result', {
+      source: 'builtin',
+      toolName,
+      durationMs: Date.now() - startedAt,
+      result,
+    })
+    return result
+  } catch (err) {
+    const error = String(err)
+    logLlmDebug('tool-exec-error', {
+      source: 'builtin',
+      toolName,
+      durationMs: Date.now() - startedAt,
+      error,
+    })
+    return { error }
+  }
+}
 
 // ── read_file ──────────────────────────────────────────────────────────────
 
@@ -20,8 +54,10 @@ const readFileTool = tool({
       .describe('文件编码，默认 utf-8'),
   }),
   execute: async ({ path, encoding }) => {
-    const content = await readFile(resolve(path), encoding ?? 'utf-8')
-    return { path, content }
+    return runBuiltinTool('read_file', { path, encoding }, async () => {
+      const content = await readFile(resolve(path), encoding ?? 'utf-8')
+      return { path, content }
+    })
   },
 })
 
@@ -39,10 +75,12 @@ const writeFileTool = tool({
       .describe('文件编码，默认 utf-8'),
   }),
   execute: async ({ path, content, encoding }) => {
-    const absPath = resolve(path)
-    await mkdir(dirname(absPath), { recursive: true })
-    await writeFile(absPath, content, encoding ?? 'utf-8')
-    return { path: absPath, bytesWritten: Buffer.byteLength(content, encoding ?? 'utf-8') }
+    return runBuiltinTool('write_file', { path, content, encoding }, async () => {
+      const absPath = resolve(path)
+      await mkdir(dirname(absPath), { recursive: true })
+      await writeFile(absPath, content, encoding ?? 'utf-8')
+      return { path: absPath, bytesWritten: Buffer.byteLength(content, encoding ?? 'utf-8') }
+    })
   },
 })
 
@@ -54,13 +92,15 @@ const listDirectoryTool = tool({
     path: z.string().describe('目录的绝对路径'),
   }),
   execute: async ({ path }) => {
-    const absPath = resolve(path)
-    const entries = await readdir(absPath, { withFileTypes: true })
-    const items = entries.map((e) => ({
-      name: e.name,
-      type: e.isDirectory() ? 'directory' : 'file',
-    }))
-    return { path: absPath, items }
+    return runBuiltinTool('list_directory', { path }, async () => {
+      const absPath = resolve(path)
+      const entries = await readdir(absPath, { withFileTypes: true })
+      const items = entries.map((e) => ({
+        name: e.name,
+        type: e.isDirectory() ? 'directory' : 'file',
+      }))
+      return { path: absPath, items }
+    })
   },
 })
 
@@ -97,9 +137,11 @@ const getDirectoryTreeTool = tool({
     maxDepth: z.number().int().min(1).max(10).optional().default(3).describe('最大递归深度，默认 3'),
   }),
   execute: async ({ path, maxDepth }) => {
-    const absPath = resolve(path)
-    const tree = await buildTree(absPath, maxDepth ?? 3, 1)
-    return { path: absPath, tree }
+    return runBuiltinTool('get_directory_tree', { path, maxDepth }, async () => {
+      const absPath = resolve(path)
+      const tree = await buildTree(absPath, maxDepth ?? 3, 1)
+      return { path: absPath, tree }
+    })
   },
 })
 
@@ -164,26 +206,32 @@ const searchFilesTool = tool({
     maxResults: z.number().int().min(1).max(500).optional().default(50).describe('最多返回结果数，默认 50'),
   }),
   execute: async ({ directory, namePattern, contentQuery, maxResults }) => {
-    const absDir = resolve(directory)
-    const limit = maxResults ?? 50
+    return runBuiltinTool(
+      'search_files',
+      { directory, namePattern, contentQuery, maxResults },
+      async () => {
+        const absDir = resolve(directory)
+        const limit = maxResults ?? 50
 
-    if (contentQuery) {
-      const matches = await searchByContent(absDir, contentQuery, limit)
-      return { directory: absDir, matches, searchType: 'content', query: contentQuery }
-    }
+        if (contentQuery) {
+          const matches = await searchByContent(absDir, contentQuery, limit)
+          return { directory: absDir, matches, searchType: 'content', query: contentQuery }
+        }
 
-    if (namePattern) {
-      // Convert simple glob (only * wildcard) to RegExp
-      const regexStr = namePattern
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape special chars
-        .replace(/\*/g, '.*') // * → .*
-      const pattern = new RegExp(`^${regexStr}$`, 'i')
-      const matches: string[] = []
-      await walkFiles(absDir, matches, pattern, limit)
-      return { directory: absDir, matches, searchType: 'name', pattern: namePattern }
-    }
+        if (namePattern) {
+          // Convert simple glob (only * wildcard) to RegExp
+          const regexStr = namePattern
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape special chars
+            .replace(/\*/g, '.*') // * → .*
+          const pattern = new RegExp(`^${regexStr}$`, 'i')
+          const matches: string[] = []
+          await walkFiles(absDir, matches, pattern, limit)
+          return { directory: absDir, matches, searchType: 'name', pattern: namePattern }
+        }
 
-    return { directory: absDir, matches: [], error: '请提供 namePattern 或 contentQuery 参数' }
+        return { directory: absDir, matches: [], error: '请提供 namePattern 或 contentQuery 参数' }
+      },
+    )
   },
 })
 
@@ -199,23 +247,25 @@ const execCommandTool = tool({
     timeoutMs: z.number().int().min(1000).max(300000).optional().default(30000).describe('超时毫秒数，默认 30000'),
   }),
   execute: async ({ command, args, cwd, timeoutMs }) => {
-    const options = {
-      cwd: cwd ? resolve(cwd) : undefined,
-      timeout: timeoutMs ?? 30000,
-      maxBuffer: 1024 * 1024 * 10, // 10 MB
-    }
-
-    try {
-      const { stdout, stderr } = await execFileAsync(command, args ?? [], options)
-      return { exitCode: 0, stdout, stderr }
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException & { code?: number; stdout?: string; stderr?: string }
-      return {
-        exitCode: typeof e.code === 'number' ? e.code : 1,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(err),
+    return runBuiltinTool('exec_command', { command, args, cwd, timeoutMs }, async () => {
+      const options = {
+        cwd: cwd ? resolve(cwd) : undefined,
+        timeout: timeoutMs ?? 30000,
+        maxBuffer: 1024 * 1024 * 10, // 10 MB
       }
-    }
+
+      try {
+        const { stdout, stderr } = await execFileAsync(command, args ?? [], options)
+        return { exitCode: 0, stdout, stderr }
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException & { code?: number; stdout?: string; stderr?: string }
+        return {
+          exitCode: typeof e.code === 'number' ? e.code : 1,
+          stdout: e.stdout ?? '',
+          stderr: e.stderr ?? String(err),
+        }
+      }
+    })
   },
 })
 
