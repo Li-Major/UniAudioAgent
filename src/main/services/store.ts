@@ -5,6 +5,7 @@ import type { AppSettings, ChatSession } from '../../shared/types'
 
 interface StoreSchema {
   llmProvider: 'openrouter' | 'ollama'
+  openrouterBaseUrl: string
   ollamaBaseUrl: string
   defaultModel: string
   openrouterApiKeyEncrypted: string
@@ -15,6 +16,7 @@ interface StoreSchema {
 const store = new Store<StoreSchema>({
   defaults: {
     llmProvider: 'openrouter',
+    openrouterBaseUrl: 'https://openrouter.ai/api/v1',
     ollamaBaseUrl: 'http://127.0.0.1:11434/api',
     defaultModel: 'anthropic/claude-3-5-sonnet',
     openrouterApiKeyEncrypted: '',
@@ -56,6 +58,7 @@ export const storeService = {
     return {
       llmProvider: store.get('llmProvider'),
       openrouterApiKey: this.getApiKey(),
+      openrouterBaseUrl: store.get('openrouterBaseUrl'),
       ollamaBaseUrl: store.get('ollamaBaseUrl'),
       defaultModel: store.get('defaultModel'),
     }
@@ -64,6 +67,9 @@ export const storeService = {
   setSettings(partial: Partial<AppSettings>): void {
     if (partial.openrouterApiKey !== undefined) {
       this.setApiKey(partial.openrouterApiKey)
+    }
+    if (partial.openrouterBaseUrl !== undefined) {
+      store.set('openrouterBaseUrl', partial.openrouterBaseUrl)
     }
     if (partial.ollamaBaseUrl !== undefined) {
       store.set('ollamaBaseUrl', partial.ollamaBaseUrl)

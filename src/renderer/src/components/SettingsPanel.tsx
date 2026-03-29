@@ -6,34 +6,11 @@ interface Props {
   onClose: () => void
 }
 
-const MODELS = [
-  { label: 'Claude 3.5 Sonnet', value: 'anthropic/claude-3-5-sonnet' },
-  { label: 'Claude 3 Haiku (快速/低价)', value: 'anthropic/claude-3-haiku' },
-  { label: 'Claude 3 Opus', value: 'anthropic/claude-3-opus' },
-  { label: 'GPT-4o', value: 'openai/gpt-4o' },
-  { label: 'GPT-4o mini (快速/低价)', value: 'openai/gpt-4o-mini' },
-  { label: 'Gemini Flash 1.5', value: 'google/gemini-flash-1.5' },
-  { label: 'DeepSeek V3', value: 'deepseek/deepseek-chat' },
-  { label: 'Qwen 2.5 72B', value: 'qwen/qwen-2.5-72b-instruct' },
-  { label: 'Llama 3.1 8B (OpenRouter 路由)', value: 'meta-llama/llama-3.1-8b-instruct' },
-  { label: 'Llama 3.1 70B (OpenRouter 路由)', value: 'meta-llama/llama-3.1-70b-instruct' },
-  { label: 'Llama 3.3 70B (OpenRouter 路由)', value: 'meta-llama/llama-3.3-70b-instruct' },
-  { label: 'Mistral Nemo (OpenRouter 路由)', value: 'mistralai/mistral-nemo' },
-  { label: 'Qwen 2.5 7B (OpenRouter 路由)', value: 'qwen/qwen-2.5-7b-instruct' },
-]
-
-const OLLAMA_MODELS = [
-  { label: 'Llama 3.1 8B', value: 'llama3.1:8b' },
-  { label: 'Llama 3.2 3B', value: 'llama3.2:3b' },
-  { label: 'Qwen 2.5 7B', value: 'qwen2.5:7b' },
-  { label: 'Mistral 7B', value: 'mistral:7b' },
-  { label: 'DeepSeek R1 7B', value: 'deepseek-r1:7b' },
-]
-
 export default function SettingsPanel({ onClose }: Props): JSX.Element {
   const [settings, setSettings] = useState<AppSettings & { _hasApiKey?: boolean }>({
     llmProvider: 'openrouter',
     openrouterApiKey: '',
+    openrouterBaseUrl: 'https://openrouter.ai/api/v1',
     ollamaBaseUrl: 'http://127.0.0.1:11434/api',
     defaultModel: 'anthropic/claude-3-5-sonnet',
   })
@@ -110,48 +87,47 @@ export default function SettingsPanel({ onClose }: Props): JSX.Element {
           </section>
 
           {/* OpenRouter API Key */}
-          <section className={settings.llmProvider === 'openrouter' ? '' : 'opacity-50'}>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              OpenRouter API Key
-            </label>
-            {settings._hasApiKey && (
-              <p className="text-xs text-teal-500 mb-1.5">✓ 已配置 API Key</p>
-            )}
-            <input
-              type="password"
-              value={settings.openrouterApiKey}
-              onChange={(e) => setSettings((s) => ({ ...s, openrouterApiKey: e.target.value }))}
-              placeholder={settings._hasApiKey ? '输入新 Key 以替换现有配置…' : 'sk-or-…'}
-              disabled={settings.llmProvider !== 'openrouter'}
-              className="w-full bg-surface-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-teal-600 transition-colors selectable"
-            />
-            <p className="text-xs text-gray-600 mt-1">
-              前往{' '}
-              <span className="text-teal-600">openrouter.ai/keys</span> 获取 API Key
-            </p>
-          </section>
+          {settings.llmProvider === 'openrouter' && (
+            <section>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                OpenRouter API Key
+              </label>
+              <input
+                type="password"
+                value={settings.openrouterApiKey}
+                onChange={(e) => setSettings((s) => ({ ...s, openrouterApiKey: e.target.value }))}
+                placeholder={settings._hasApiKey ? '输入新 Key 以替换现有配置…' : 'sk-or-…'}
+                disabled={settings.llmProvider !== 'openrouter'}
+                className="w-full bg-surface-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-teal-600 transition-colors selectable"
+              />
+            </section>
+          )}
+         
+
+          {settings.llmProvider === 'openrouter' && (
+            <section>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                OpenRouter Base URL
+              </label>
+              <input
+                type="text"
+                value={settings.openrouterBaseUrl}
+                onChange={(e) => setSettings((s) => ({ ...s, openrouterBaseUrl: e.target.value }))}
+                placeholder="https://openrouter.ai/api/v1"
+                disabled={settings.llmProvider !== 'openrouter'}
+                className="w-full bg-surface-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-teal-600 transition-colors selectable font-mono"
+              />
+              <p className="text-xs text-gray-600 mt-1">
+                可替换为兼容 OpenRouter API 的私有网关地址。
+              </p>
+            </section>
+          )}
 
           {/* Default Model */}
           <section>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              默认模型
+              模型
             </label>
-            <select
-              value={settings.defaultModel}
-              onChange={(e) => setSettings((s) => ({ ...s, defaultModel: e.target.value }))}
-              className="w-full bg-surface-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-teal-600 transition-colors"
-            >
-              {(settings.llmProvider === 'ollama' ? OLLAMA_MODELS : MODELS).map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-600 mt-1">
-              {settings.llmProvider === 'ollama'
-                ? '也可直接输入本地 Ollama 模型名，例如 llama3.1:8b'
-                : '也可直接输入任意 OpenRouter 模型 ID，包括 OpenRouter 提供的 Llama、Mistral、Qwen 等开源模型'}
-            </p>
             <input
               type="text"
               value={settings.defaultModel}
@@ -182,12 +158,6 @@ export default function SettingsPanel({ onClose }: Props): JSX.Element {
               </p>
             </section>
           )}
-
-          <section>
-            <p className="text-xs text-gray-600 leading-5">
-              当前应用已移除内置 WAAPI 连接。后续 Wwise 接入将通过 MCP 完成，由 MCP 侧负责发起 WebSocket 连接和工具执行。
-            </p>
-          </section>
         </div>
 
         {/* Footer */}

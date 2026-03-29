@@ -34,6 +34,7 @@ export interface ToolCallInfo {
 export interface AppSettings {
   llmProvider: 'openrouter' | 'ollama'
   openrouterApiKey: string
+  openrouterBaseUrl: string
   ollamaBaseUrl: string
   defaultModel: string
 }
