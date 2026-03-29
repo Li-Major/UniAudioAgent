@@ -36,6 +36,8 @@ function ToolCallDetails({
   result?: unknown
 }): JSX.Element {
   const isCalling = status === 'calling'
+  const isError = status === 'error'
+  const isSuccess = status === 'done'
 
   return (
     <details className="mt-2 rounded-xl border border-surface-600/80 bg-surface-800/70 overflow-hidden">
@@ -45,10 +47,20 @@ function ToolCallDetails({
             className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-mono shrink-0 ${
               isCalling
                 ? 'bg-yellow-900/50 text-yellow-400 animate-pulse'
-                : 'bg-teal-900/40 text-teal-400'
+                : isError
+                  ? 'bg-rose-900/50 text-rose-400'
+                  : isSuccess
+                    ? 'bg-teal-900/40 text-teal-400'
+                    : 'bg-gray-900/40 text-gray-400'
             }`}
           >
-            {isCalling ? '⟳ 执行中' : '✓ 已完成'}
+            {isCalling
+              ? '⟳ 执行中'
+              : isError
+                ? '✗ 失败'
+                : isSuccess
+                  ? '✓ 已完成'
+                  : '● ' + status}
           </span>
           <span className="text-sm text-gray-200 font-mono truncate">{toolName}</span>
         </div>
@@ -58,7 +70,7 @@ function ToolCallDetails({
       <div className="border-t border-surface-600/80 px-3 py-3 space-y-3">
         <div>
           <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Status</div>
-          <div className="text-sm text-gray-200">{status}</div>
+          <div className={`text-sm ${isError ? 'text-rose-400' : 'text-gray-200'}`}>{status}</div>
         </div>
 
         <div>
@@ -70,7 +82,11 @@ function ToolCallDetails({
 
         <div>
           <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Result</div>
-          <pre className="text-xs leading-5 whitespace-pre-wrap break-words rounded-lg bg-surface-900/90 border border-surface-600 px-3 py-2 text-gray-300 overflow-x-auto selectable">
+          <pre className={`text-xs leading-5 whitespace-pre-wrap break-words rounded-lg border px-3 py-2 overflow-x-auto selectable ${
+            isError
+              ? 'bg-rose-950/40 border-rose-600 text-rose-300'
+              : 'bg-surface-900/90 border-surface-600 text-gray-300'
+          }`}>
             {formatToolPayload(result)}
           </pre>
         </div>
@@ -151,6 +167,23 @@ function MessageBubble({ message, showThinking }: { message: ChatMessage; showTh
             : 'bg-surface-700 text-gray-200 rounded-tl-sm'
         }`}
       >
+        {/* Thinking */}
+        {!isUser && message.thinking && (
+          <details
+            className="mb-3 rounded-xl border border-surface-600/80 bg-surface-800/70 overflow-hidden"
+            open={showThinking}
+          >
+            <summary className="cursor-pointer list-none px-3 py-2 text-xs tracking-wide text-cyan-300 hover:bg-surface-700/60 transition-colors">
+              深度思考
+            </summary>
+            <div className="border-t border-surface-600/80 px-3 py-3">
+              <pre className="text-xs leading-5 whitespace-pre-wrap break-words text-gray-300 selectable">
+                {message.thinking}
+              </pre>
+            </div>
+          </details>
+        )}
+
         {/* Tool calls */}
         {(message.toolCalls ?? []).length > 0 && (
           <div className="mb-3">
@@ -225,7 +258,11 @@ export default function MessageList({ messages, isLoading }: Props): JSX.Element
           key={m.id}
           message={m}
           showThinking={
-            isLoading && idx === messages.length - 1 && m.role === 'assistant' && m.content.length === 0
+            isLoading &&
+            idx === messages.length - 1 &&
+            m.role === 'assistant' &&
+            m.content.length === 0 &&
+            (m.thinking?.length ?? 0) === 0
           }
         />
       ))}

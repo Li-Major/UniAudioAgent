@@ -181,6 +181,7 @@ function schemaToZod(schema: unknown): ZodTypeAny {
     maximum?: number
     anyOf?: unknown[]
     oneOf?: unknown[]
+    additionalProperties?: boolean | Record<string, unknown>
   }
 
   if (Array.isArray(node.enum) && node.enum.length > 0) {
@@ -241,13 +242,23 @@ function schemaToZod(schema: unknown): ZodTypeAny {
       const shape: Record<string, ZodTypeAny> = {}
       const required = new Set(Array.isArray(node.required) ? node.required : [])
       const properties = node.properties ?? {}
+      const additionalPropertiesAllowed = node.additionalProperties !== false
 
       for (const [key, value] of Object.entries(properties)) {
         const propertySchema = schemaToZod(value)
         shape[key] = required.has(key) ? propertySchema : propertySchema.optional()
       }
 
-      return withDescription(z.object(shape), node.description)
+      let schema: ZodTypeAny = z.object(shape)
+      
+      // Allow catchall (additional properties) if additionalProperties is not explicitly false
+      // This is important for MCP tools like wwise__catalog.executeTool where the 'arguments' parameter
+      // needs to accept dynamic properties not predefined in the schema
+      if (additionalPropertiesAllowed && Object.keys(shape).length >= 0) {
+        schema = (schema as z.ZodObject<any, 'passthrough'>).catchall(z.any())
+      }
+
+      return withDescription(schema, node.description)
     }
     default:
       return withDescription(z.any(), node.description)
@@ -423,6 +434,8 @@ async function createServerTools(server: McpServerConfig): Promise<{ client: Cli
           toolName: registeredName,
           rawToolName,
           input,
+          inputType: typeof input,
+          inputKeys: input && typeof input === 'object' ? Object.keys(input as object) : undefined,
         })
 
         const run = client.callTool({ name: rawToolName, arguments: input as Record<string, unknown> })

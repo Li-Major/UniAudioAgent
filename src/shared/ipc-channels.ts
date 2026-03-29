@@ -5,6 +5,8 @@ export const IPC = {
   CHAT_SEND: 'chat:send',
   /** main → renderer: text token streamed from the LLM */
   CHAT_DELTA: 'chat:delta',
+  /** main → renderer: thinking/reasoning token streamed from the LLM */
+  CHAT_THINKING_DELTA: 'chat:thinking-delta',
   /** main → renderer: a tool was called */
   CHAT_TOOL_CALL: 'chat:tool-call',
   /** main → renderer: a tool returned a result */

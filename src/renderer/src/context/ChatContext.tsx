@@ -135,6 +135,7 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
         id: assistantId,
         role: 'assistant',
         content: '',
+        thinking: '',
         timestamp: Date.now(),
         status: 'responding',
         toolCalls: [],
@@ -214,6 +215,29 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
       )
 
       cleanups.push(
+        window.api.on(IPC.CHAT_THINKING_DELTA, (delta) => {
+          const id = streamingIdRef.current
+          if (!id) return
+          setCurrentSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  messages: prev.messages.map((m) =>
+                    m.id === id
+                      ? {
+                          ...m,
+                          thinking: (m.thinking ?? '') + (delta as string),
+                          status: 'responding',
+                        }
+                      : m,
+                  ),
+                }
+              : prev,
+          )
+        }),
+      )
+
+      cleanups.push(
         window.api.on(IPC.CHAT_TOOL_CALL, (payload) => {
           const id = streamingIdRef.current
           if (!id) return
@@ -245,6 +269,11 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
           const id = streamingIdRef.current
           if (!id) return
           const { toolName, result } = payload as ChatToolResultPayload
+          
+          // Detect if result is an error (has 'error' property)
+          const isToolError = result && typeof result === 'object' && 'error' in result
+          const toolStatus = isToolError ? 'error' : 'done'
+          
           setCurrentSession((prev) =>
             prev
               ? {
@@ -262,7 +291,7 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
                               : 'tool-calling',
                           toolCalls: (m.toolCalls ?? []).map((tc) =>
                             tc.toolName === toolName && tc.status === 'calling'
-                              ? { ...tc, result, status: 'done' }
+                              ? { ...tc, result, status: toolStatus }
                               : tc,
                           ),
                         }

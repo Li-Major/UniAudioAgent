@@ -10,6 +10,8 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  /** Streamed model reasoning/thinking text (if provider supports it). */
+  thinking?: string
   timestamp: number
   status?: ChatMessageStatus
   /** Tool calls made during this message */
@@ -41,6 +43,11 @@ export interface AppSettings {
 
 /** Passed from main → renderer to indicate streaming progress */
 export interface ChatDeltaEvent {
+  delta: string
+}
+
+/** Passed from main → renderer to stream model thinking/reasoning tokens. */
+export interface ChatThinkingDeltaEvent {
   delta: string
 }
 

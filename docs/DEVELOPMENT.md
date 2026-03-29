@@ -199,6 +199,7 @@ ipcMain.handle(IPC.CHAT_SEND, async (event, messages: CoreMessage[]) => {
 
   for await (const part of result.fullStream) {
     if (part.type === 'text-delta')   event.sender.send(IPC.CHAT_DELTA, part.textDelta)
+    if (part.type === 'reasoning-delta') event.sender.send(IPC.CHAT_THINKING_DELTA, part.textDelta)
     if (part.type === 'tool-call')    event.sender.send(IPC.CHAT_TOOL_CALL, {...})
     if (part.type === 'tool-result')  event.sender.send(IPC.CHAT_TOOL_RESULT, {...})
     if (part.type === 'error')        event.sender.send(IPC.CHAT_ERROR, String(part.error))
