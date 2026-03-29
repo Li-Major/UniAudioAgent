@@ -1,8 +1,17 @@
+export type ChatMessageStatus =
+  | 'sent'
+  | 'responding'
+  | 'tool-calling'
+  | 'completed'
+  | 'completed-tools'
+  | 'error'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  status?: ChatMessageStatus
   /** Tool calls made during this message */
   toolCalls?: ToolCallInfo[]
 }

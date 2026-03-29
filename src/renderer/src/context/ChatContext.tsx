@@ -1,11 +1,23 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { IPC } from '@shared/ipc-channels'
-import type { ChatMessage, ChatSession, ToolCallInfo } from '@shared/types'
+import type { ChatMessage, ChatMessageStatus, ChatSession, ToolCallInfo } from '@shared/types'
 import type { CoreMessage } from 'ai'
 
 type ChatToolCallPayload = { toolName: string; args: Record<string, unknown> }
 type ChatToolResultPayload = { toolName: string; result: unknown }
+
+function resolveFinalAssistantStatus(message: ChatMessage): ChatMessageStatus {
+  if (message.status === 'error') {
+    return 'error'
+  }
+
+  if ((message.toolCalls ?? []).length > 0 && message.content.length === 0) {
+    return 'completed-tools'
+  }
+
+  return 'completed'
+}
 
 interface ChatContextValue {
   currentSession: ChatSession | null
@@ -114,6 +126,7 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
         role: 'user',
         content: text,
         timestamp: Date.now(),
+        status: 'sent',
       }
 
       const assistantId = crypto.randomUUID()
@@ -123,6 +136,7 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
+        status: 'responding',
         toolCalls: [],
       }
 
@@ -157,8 +171,14 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
               m.id === assistantId
                 ? {
                     ...m,
+                    status: resolveFinalAssistantStatus(m),
                     toolCalls: (m.toolCalls ?? []).map((tc) =>
-                      tc.status === 'calling' ? { ...tc, status: 'done' as const } : tc,
+                      tc.status === 'calling'
+                        ? {
+                            ...tc,
+                            status: source === 'invoke-error' ? ('error' as const) : ('done' as const),
+                          }
+                        : tc,
                     ),
                   }
                 : m,
@@ -183,7 +203,9 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
               ? {
                   ...prev,
                   messages: prev.messages.map((m) =>
-                    m.id === id ? { ...m, content: m.content + (delta as string) } : m,
+                    m.id === id
+                      ? { ...m, content: m.content + (delta as string), status: 'responding' }
+                      : m,
                   ),
                 }
               : prev,
@@ -204,6 +226,7 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
                     m.id === id
                       ? {
                           ...m,
+                          status: 'tool-calling',
                           toolCalls: [
                             ...(m.toolCalls ?? []),
                             { toolName, args, status: 'calling' } satisfies ToolCallInfo,
@@ -230,6 +253,13 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
                     m.id === id
                       ? {
                           ...m,
+                          status: (m.toolCalls ?? []).some(
+                            (tc) => tc.toolName !== toolName && tc.status === 'calling',
+                          )
+                            ? 'tool-calling'
+                            : m.content.length > 0
+                              ? 'responding'
+                              : 'tool-calling',
                           toolCalls: (m.toolCalls ?? []).map((tc) =>
                             tc.toolName === toolName && tc.status === 'calling'
                               ? { ...tc, result, status: 'done' }
@@ -254,7 +284,14 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
                   ...prev,
                   messages: prev.messages.map((m) =>
                     m.id === id
-                      ? { ...m, content: m.content || `⚠️ 发生错误: ${String(errMsg)}` }
+                      ? {
+                          ...m,
+                          content: m.content || `⚠️ 发生错误: ${String(errMsg)}`,
+                          status: 'error',
+                          toolCalls: (m.toolCalls ?? []).map((tc) =>
+                            tc.status === 'calling' ? { ...tc, status: 'error' } : tc,
+                          ),
+                        }
                       : m,
                   ),
                 }
@@ -278,7 +315,16 @@ export function ChatProvider({ children }: { children: ReactNode }): JSX.Element
             ? {
                 ...prev,
                 messages: prev.messages.map((m) =>
-                  m.id === id ? { ...m, content: m.content || `⚠️ 调用失败: ${String(err)}` } : m,
+                  m.id === id
+                    ? {
+                        ...m,
+                        content: m.content || `⚠️ 调用失败: ${String(err)}`,
+                        status: 'error',
+                        toolCalls: (m.toolCalls ?? []).map((tc) =>
+                          tc.status === 'calling' ? { ...tc, status: 'error' } : tc,
+                        ),
+                      }
+                    : m,
                 ),
               }
             : prev,
