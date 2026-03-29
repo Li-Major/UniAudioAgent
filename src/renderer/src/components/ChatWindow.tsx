@@ -2,7 +2,11 @@ import MessageList from './MessageList'
 import InputBar from './InputBar'
 import { useChat } from '../hooks/useChat'
 
-export default function ChatWindow(): JSX.Element {
+interface Props {
+  settingsRefreshKey?: number
+}
+
+export default function ChatWindow({ settingsRefreshKey = 0 }: Props): JSX.Element {
   const { currentSession, isLoading, sendMessage, clearMessages } = useChat()
 
   const messages = currentSession?.messages || []
@@ -24,7 +28,7 @@ export default function ChatWindow(): JSX.Element {
       <MessageList messages={messages} isLoading={isLoading} />
 
       {/* Input */}
-      <InputBar onSend={sendMessage} isLoading={isLoading} />
+      <InputBar onSend={sendMessage} isLoading={isLoading} settingsRefreshKey={settingsRefreshKey} />
     </div>
   )
 }

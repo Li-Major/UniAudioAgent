@@ -7,6 +7,7 @@ import { ChatProvider, useChat } from './context/ChatContext'
 function AppInner(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [settingsRefreshKey, setSettingsRefreshKey] = useState(0)
 
   const { currentSession, sessions, initError, createNewSession, switchSession, deleteSession, updateSessionTitle } = useChat()
 
@@ -87,12 +88,17 @@ function AppInner(): JSX.Element {
 
         {/* Chat window */}
         <div className="flex-1 overflow-hidden">
-          <ChatWindow />
+          <ChatWindow settingsRefreshKey={settingsRefreshKey} />
         </div>
       </main>
 
       {/* Settings panel overlay */}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          onSaved={() => setSettingsRefreshKey((prev) => prev + 1)}
+        />
+      )}
     </div>
   )
 }

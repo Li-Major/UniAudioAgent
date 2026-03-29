@@ -4,9 +4,10 @@ import type { AppSettings } from '@shared/types'
 
 interface Props {
   onClose: () => void
+  onSaved?: () => void
 }
 
-export default function SettingsPanel({ onClose }: Props): JSX.Element {
+export default function SettingsPanel({ onClose, onSaved }: Props): JSX.Element {
   const [settings, setSettings] = useState<AppSettings & { _hasApiKey?: boolean }>({
     llmProvider: 'openrouter',
     openrouterApiKey: '',
@@ -26,6 +27,7 @@ export default function SettingsPanel({ onClose }: Props): JSX.Element {
   const handleSave = async (): Promise<void> => {
     setSaving(true)
     await window.api.invoke(IPC.SETTINGS_SET, settings)
+    onSaved?.()
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)

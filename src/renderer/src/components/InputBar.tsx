@@ -1,22 +1,38 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { IPC } from '@shared/ipc-channels'
+import type { AppSettings } from '@shared/types'
 
 interface Props {
   onSend: (text: string) => void
   isLoading: boolean
+  settingsRefreshKey?: number
 }
 
-const POPULAR_MODELS = [
-  { label: 'Claude 3.5 Sonnet', value: 'anthropic/claude-3-5-sonnet' },
-  { label: 'Claude 3 Haiku', value: 'anthropic/claude-3-haiku' },
-  { label: 'GPT-4o', value: 'openai/gpt-4o' },
-  { label: 'GPT-4o mini', value: 'openai/gpt-4o-mini' },
-  { label: 'Gemini Flash 1.5', value: 'google/gemini-flash-1.5' },
-  { label: 'DeepSeek V3', value: 'deepseek/deepseek-chat' },
-]
-
-export default function InputBar({ onSend, isLoading }: Props): JSX.Element {
+export default function InputBar({ onSend, isLoading, settingsRefreshKey = 0 }: Props): JSX.Element {
   const [input, setInput] = useState('')
+  const [providerLabel, setProviderLabel] = useState('OpenRouter')
+  const [currentModel, setCurrentModel] = useState('anthropic/claude-3-5-sonnet')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    window.api
+      .invoke<AppSettings & { _hasApiKey?: boolean }>(IPC.SETTINGS_GET)
+      .then((settings) => {
+        if (!isMounted) return
+        const label = settings.llmProvider === 'ollama' ? 'Ollama' : 'OpenRouter'
+        setProviderLabel(label)
+        setCurrentModel(settings.defaultModel)
+      })
+      .catch((err) => {
+        console.error('[InputBar] load settings failed:', err)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [settingsRefreshKey])
 
   const handleSend = useCallback(() => {
     const text = input.trim()
@@ -101,14 +117,7 @@ export default function InputBar({ onSend, isLoading }: Props): JSX.Element {
         </button>
       </div>
       <p className="text-xs text-gray-700 mt-1.5 px-1">
-        常用模型：
-        {POPULAR_MODELS.slice(0, 3).map((m, i) => (
-          <span key={m.value}>
-            <span className="text-gray-600">{m.label}</span>
-            {i < 2 && <span className="mx-1 text-gray-800">·</span>}
-          </span>
-        ))}
-        <span className="text-gray-700 ml-1">（在设置中选择）</span>
+        当前模型：{providerLabel} / {currentModel}
       </p>
     </div>
   )
